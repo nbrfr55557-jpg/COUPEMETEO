@@ -1,0 +1,2034 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Coupe Météo Hélico</title>
+<meta name="description" content="Coupe météo le long d'un trajet ou sur un point pour la préparation des vols hélicoptère : base des nuages, visibilité, relief, vent par tranches, givrage.">
+<meta name="theme-color" content="#EEF1F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1317" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Coupe Météo">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+/* Mise en page : colonne unique sur téléphone ; au-delà de 1000 px, bilan | carte puis coupe et détail pleine largeur.
+   Bandeau collant : onglets Trajet / Point et curseur d'heure. */
+:root{
+  --bg:#EEF1F1; --bar:rgba(238,241,241,.93); --panel:#FFFFFF; --ink:#15212A; --muted:#5A6A73;
+  --line:#D3DADD; --grid:#E4E9EB; --accent:#0B7781; --accent-ink:#FFFFFF;
+  --temp:#D2452F; --dew:#2B8853; --iso0:#2462C2; --ice:#7A4AD4; --cloud:#5F707A; --terrain:#B08D5E; --route:#0B7781;
+  --ok:#2B8853; --warn:#BE7F06; --crit:#C7362A;
+  --f-disp:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
+  --f-body:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1317; --bar:rgba(13,19,23,.93); --panel:#141D23; --ink:#DCE5E8; --muted:#8D9EA7;
+    --line:#26333B; --grid:#1D2930; --accent:#3BB3BC; --accent-ink:#04181A;
+    --temp:#FF7B5E; --dew:#5AC98B; --iso0:#72A9FF; --ice:#B48CFF; --cloud:#B7C5CD; --terrain:#6B573D; --route:#1F8F99;
+    --ok:#5AC98B; --warn:#F0B43C; --crit:#FF6A5A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1317; --bar:rgba(13,19,23,.93); --panel:#141D23; --ink:#DCE5E8; --muted:#8D9EA7;
+  --line:#26333B; --grid:#1D2930; --accent:#3BB3BC; --accent-ink:#04181A;
+  --temp:#FF7B5E; --dew:#5AC98B; --iso0:#72A9FF; --ice:#B48CFF; --cloud:#B7C5CD; --terrain:#6B573D; --route:#1F8F99;
+  --ok:#5AC98B; --warn:#F0B43C; --crit:#FF6A5A; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--f-body);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:1100}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1240px;margin:0 auto}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Bandeau */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:1000;background:var(--bar);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar-in{display:grid;gap:6px;padding-block:8px 10px}
+.bar-r1{display:flex;align-items:center;gap:10px;min-width:0}
+.brand{font:700 15px/1 var(--f-disp);letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;display:flex;align-items:center;gap:7px}
+.brand svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:1.8;flex:none}
+@media (max-width:430px){.brand span{display:none}}
+.tabs{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.tabs button{border:0;background:var(--panel);padding:7px 13px;font:600 13px/1 var(--f-body);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.bar-pt{flex:1;min-width:0;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:34px;height:30px;display:grid;place-items:center;cursor:pointer;flex:none}
+.icon-btn svg{width:16px;height:16px;stroke:var(--ink);fill:none;stroke-width:1.8}
+.bar-r2{display:flex;align-items:center;gap:8px}
+.step{flex:none;width:36px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font:600 18px/1 var(--f-disp)}
+.step:disabled{opacity:.4;cursor:default}
+#hRange{flex:1;min-width:0;accent-color:var(--accent);height:30px}
+.hlab{flex:none;min-width:96px;text-align:right;font:700 22px/1 var(--f-disp);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.hlab small{display:block;font:500 11px/1.2 var(--f-body);color:var(--muted);letter-spacing:0}
+
+/* Panneaux */
+.main{display:grid;gap:14px;padding-block:14px 40px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+h2{margin:0 0 10px;font:700 17px/1.2 var(--f-disp);letter-spacing:.06em;text-transform:uppercase;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;text-wrap:balance}
+.h2sub{font:500 13px/1.2 var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.note{margin:8px 0 0;color:var(--muted);font-size:13px}
+.grid2{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:1000px){.grid2{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}}
+
+/* Réglages */
+details.setup>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:4px 10px}
+details.setup>summary::-webkit-details-marker{display:none}
+details.setup>summary::after{content:"Modifier";grid-column:2;grid-row:1;font-size:13px;color:var(--accent);font-weight:600}
+details.setup[open]>summary::after{content:"Replier"}
+details.setup>summary .sumline{grid-column:1/-1;grid-row:2}
+.ptitle{font:700 17px/1.2 var(--f-disp);letter-spacing:.06em;text-transform:uppercase}
+.sumline{color:var(--muted);font-size:13px;min-width:0}
+.form{display:grid;gap:12px;margin-top:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:720px){.form{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.fld{display:grid;gap:4px;min-width:0;align-content:start}
+.fld>span{font:600 12px/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fld-wide{grid-column:1/-1}
+@media (min-width:720px){.fld-wide{grid-column:span 3}}
+.fld input,.fld select{width:100%;min-width:0;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:0 10px}
+.mono{font-family:var(--f-mono);font-size:14px}
+.row{display:flex;gap:8px;min-width:0}
+.hint{color:var(--muted);font-size:12px}
+.hint.err{color:var(--crit)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:40px}
+.seg button{flex:1;border:0;background:var(--bg);cursor:pointer;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.rfields{display:grid;gap:10px;margin-top:12px}
+.rp{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px 10px;align-items:start}
+.rp-tag{grid-row:1/3;width:28px;height:28px;margin-top:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font:700 14px/1 var(--f-disp)}
+.rp-l{display:grid;gap:8px;grid-template-columns:minmax(0,1fr);min-width:0}
+@media (min-width:720px){.rp-l{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;align-items:end}}
+.swap{justify-self:start;margin-left:38px}
+details.sub{margin-top:12px;border-top:1px solid var(--grid);padding-top:10px}
+details.sub>summary{cursor:pointer;font:600 13px/1.3 var(--f-body);color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:600;text-decoration:none;color:var(--ink);white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.sm{height:34px;padding:0 11px;font-size:13.5px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8}
+.btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.favs{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.fav{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;background:var(--bg);font-size:13px;overflow:hidden;max-width:100%}
+.fav button{border:0;background:none;cursor:pointer;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.fav button.x{padding:5px 9px 5px 2px;color:var(--muted);flex:none}
+
+/* États */
+.status{border-radius:10px;padding:12px 14px;border:1px solid var(--line);background:var(--panel);display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.status.err{border-color:var(--crit)}
+.status p{margin:0;flex:1 1 240px}
+.demo{border:1px dashed var(--warn);border-radius:10px;padding:10px 14px;font-weight:600;color:var(--warn);display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.demo .btn{height:34px}
+.src{color:var(--muted);font-size:12.5px;margin-top:10px}
+.pill{display:inline-block;font:700 11px/1 var(--f-body);letter-spacing:.07em;text-transform:uppercase;padding:4px 7px;border-radius:5px;background:var(--grid);color:var(--muted)}
+.pill.c{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+.pill.w{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.pill.o{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+
+/* Synthèse */
+.synth{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}
+.si{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:var(--bg);min-width:0}
+.si .l{font:600 11px/1.2 var(--f-body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px}
+.si .l::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.si.o .l::before{background:var(--ok)} .si.w .l::before{background:var(--warn)} .si.c .l::before{background:var(--crit)}
+.si .v{font:700 21px/1.15 var(--f-disp);font-variant-numeric:tabular-nums;margin-top:3px}
+.si.w .v{color:var(--warn)} .si.c .v{color:var(--crit)}
+.si .d{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.3}
+.si.span2{grid-column:span 2}
+@media (max-width:440px){.synth .si:last-child:nth-child(odd){grid-column:1/-1}}
+.wt{display:grid;grid-template-columns:auto 1fr;gap:1px 10px;margin-top:4px;font:500 12.5px/1.35 var(--f-mono);font-variant-numeric:tabular-nums}
+.wt span:nth-child(odd){color:var(--muted);font-family:var(--f-body)}
+.wt .w{color:var(--warn)} .wt .c{color:var(--crit)}
+
+/* Pire point */
+.rthead{font-size:14px;margin:-4px 0 10px;color:var(--muted)}
+.rthead b{color:var(--ink);font-weight:600}
+.worst{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg);margin-bottom:10px}
+.worst.c{border-color:color-mix(in srgb,var(--crit) 55%,var(--line))}
+.worst.w{border-color:color-mix(in srgb,var(--warn) 55%,var(--line))}
+.worst .wl{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font:600 12px/1.2 var(--f-body);color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.worst .wv{font:700 27px/1.1 var(--f-disp);margin-top:6px;font-variant-numeric:tabular-nums}
+.worst.c .wv{color:var(--crit)} .worst.w .wv{color:var(--warn)}
+.worst .wd{font-size:14.5px;margin-top:2px}
+.worst .wc{font:12px var(--f-mono);color:var(--muted);margin-top:4px}
+.wact{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+
+/* Carte */
+#map{height:320px;border-radius:9px;border:1px solid var(--line);background:var(--grid);z-index:0}
+@media (min-width:1000px){#map{height:100%;min-height:380px}}
+#rtMapP{display:flex;flex-direction:column}
+#rtMapP .mapbox{flex:1;min-height:0;display:flex;flex-direction:column}
+.maphint{font-size:13px;color:var(--muted);margin-top:8px}
+.maphint.on{color:var(--accent);font-weight:600}
+.pinwrap{background:none;border:0}
+.pin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 14px/1 var(--f-disp);border:2px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.wpin{width:18px;height:18px;margin:4px;transform:rotate(45deg);background:var(--crit);border:2px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.leaflet-container{font:12px var(--f-body)}
+.leaflet-tooltip.wtip{font:600 12px var(--f-body);color:var(--crit)}
+
+/* Coupe trajet */
+.cutbox{position:relative;min-width:0}
+.cutbox svg{display:block;max-width:100%;touch-action:manipulation;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 4px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend svg{width:22px;height:12px;flex:none}
+.selbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-bottom:8px;font-size:13.5px}
+.selbar .k{font:600 14px var(--f-disp);letter-spacing:.03em}
+.selbar .mono{font-size:12.5px;color:var(--muted)}
+
+/* Coupe verticale (point) */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12.5px;background:var(--bg);white-space:nowrap}
+.chip b{font:600 14px/1 var(--f-disp);letter-spacing:.02em;margin-left:3px}
+.chip.w{border-color:var(--warn)} .chip.w b{color:var(--warn)}
+.chip.c{border-color:var(--crit)} .chip.c b{color:var(--crit)}
+.profwrap svg{display:block;width:100%;max-width:560px;height:auto;margin:0 auto}
+.tblwrap{overflow-x:auto;margin-top:10px;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font:12.5px/1.3 var(--f-mono);font-variant-numeric:tabular-nums}
+th{font:600 11px/1.2 var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--grid);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+tr.sfc td{border-top:2px solid var(--terrain)}
+td.w{color:var(--warn);font-weight:500} td.c{color:var(--crit);font-weight:500}
+td.dim{color:var(--muted)}
+
+/* Bandeaux horizontaux (mission, frise, détail trajet) */
+.mx{display:flex;min-width:0}
+.mx-l{flex:none;width:86px;border-right:1px solid var(--line)}
+.mx-s{flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.mx-in{position:relative}
+.mh,.mhl{height:40px;display:flex;align-items:flex-end}
+.mh button{width:var(--cw,48px);flex:none;height:40px;border:0;background:none;cursor:pointer;padding:0;display:grid;align-content:end;justify-items:center;gap:1px;color:var(--ink)}
+.mh .dy{font:600 10px/1 var(--f-body);color:var(--muted);text-transform:uppercase;letter-spacing:.04em;min-height:10px}
+.mh .hz{font:700 15px/1 var(--f-disp);font-variant-numeric:tabular-nums}
+.mh .hl{font:400 10px/1 var(--f-body);color:var(--muted);padding-bottom:3px}
+.mh button.sel .hz{color:var(--accent)}
+.mh button.wst .hz{color:var(--crit)}
+.mhl{font:600 11px/1 var(--f-body);color:var(--muted);padding:0 0 6px 2px;letter-spacing:.05em}
+.mr{display:flex;height:27px;align-items:center}
+.mr span{width:var(--cw,48px);flex:none;text-align:center;font:500 11.5px/27px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.mr span.sel{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.mr span.o{color:var(--ok)}
+.mr span.w{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.mr span.c{color:var(--crit);background:color-mix(in srgb,var(--crit) 15%,transparent)}
+.mr span.dim{color:var(--muted)}
+.mr.big span{font:700 12px/27px var(--f-body);letter-spacing:.03em}
+.ml{height:27px;display:flex;flex-direction:column;justify-content:center;padding-left:2px;line-height:1.05}
+.ml b{font:600 12.5px/1.05 var(--f-body);white-space:nowrap}
+.ml i{font:400 10px/1.1 var(--f-body);color:var(--muted);font-style:normal}
+.mr.zb span:not(.w):not(.c):not(.sel),.mlo{background:color-mix(in srgb,var(--grid) 55%,transparent)}
+.msep{height:6px}
+.mgrp{height:22px;display:flex;align-items:flex-end;padding-bottom:3px;font:600 10.5px/1 var(--f-body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding-left:2px;white-space:nowrap;position:relative;z-index:2}
+.wt small{font:400 11px var(--f-body);color:var(--muted)}
+.btn.wrap{white-space:normal;height:auto;min-height:40px;padding-block:8px;text-align:center}
+
+/* SVG */
+.gl{stroke:var(--grid);stroke-width:1}
+.gl0{stroke:var(--line);stroke-width:1;fill:none}
+.tk{fill:var(--muted);font:500 10px var(--f-mono)}
+.tkh{fill:var(--muted);font:600 9.5px var(--f-body);letter-spacing:.05em}
+.cl{fill:var(--cloud)}
+.terr{fill:var(--terrain)}
+.terr-l{fill:var(--panel);font:600 10px var(--f-body)}
+.ln-t{fill:none;stroke:var(--temp);stroke-width:2.2;stroke-linejoin:round}
+.ln-td{fill:none;stroke:var(--dew);stroke-width:2.2;stroke-linejoin:round;stroke-dasharray:6 3}
+.pt-t{fill:var(--temp)} .pt-td{fill:var(--dew)}
+.iso{fill:none;stroke:var(--iso0);stroke-width:2;stroke-dasharray:7 4}
+.iso-v{stroke:var(--iso0);stroke-width:1.2;stroke-dasharray:3 3}
+.iso-l{fill:var(--iso0);font:600 11px var(--f-body)}
+.ceil{stroke:var(--crit);stroke-width:2.4;stroke-linecap:round}
+.ceil-d{stroke:var(--crit);stroke-width:1.6;stroke-dasharray:4 3}
+.ceil-l{fill:var(--crit);font:600 11px var(--f-body)}
+.bline{fill:none;stroke:var(--ink);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.bline-h{fill:none;stroke:var(--panel);stroke-width:5;stroke-linejoin:round;stroke-linecap:round;opacity:.8}
+.bdot{fill:var(--ink);stroke:var(--panel);stroke-width:1.2}
+.barb{fill:none;stroke:var(--ink);stroke-width:1.4;stroke-linecap:round}
+.pen{fill:var(--ink)}
+.stn{fill:var(--ink)}
+.ice1{fill:var(--ice);opacity:.28} .ice2{fill:var(--ice);opacity:.55} .ice3{fill:var(--ice);opacity:.9}
+.hatch line{stroke:var(--ice);stroke-width:1.6}
+.cur{fill:var(--accent);opacity:.09;stroke:none}
+.cur-b{fill:none;stroke:var(--accent);stroke-width:1.6}
+.csep{stroke:var(--grid);stroke-width:1}
+.nd{fill:var(--muted);font:500 10px var(--f-body)}
+.lbl-bg{fill:var(--panel);opacity:.88}
+.wst-l{stroke:var(--crit);stroke-width:1.6;stroke-dasharray:5 3}
+.wst-m{fill:var(--crit);stroke:var(--panel);stroke-width:1.5}
+.wst-t{fill:var(--crit);font:700 11px var(--f-body)}
+.wst-t2{fill:var(--ink);font:500 10.5px var(--f-body)}
+.s-o{fill:var(--ok)} .s-w{fill:var(--warn)} .s-c{fill:var(--crit)} .s-n{fill:var(--grid)}
+.stl{fill:var(--muted);font:600 9.5px var(--f-body);letter-spacing:.06em}
+.da{fill:var(--accent);font:700 12px var(--f-disp)}
+
+.cmp th:first-child,.cmp td:first-child{position:sticky;left:0;background:var(--panel)}
+.foot{color:var(--muted);font-size:12.5px;line-height:1.5;display:grid;gap:6px}
+.foot p{margin:0;max-width:78ch}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.empty{color:var(--muted);margin:16px 0;text-align:center}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap gut bar-in">
+    <div class="bar-r1">
+      <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 20V9M12 20V4M18 20v-8"/><path d="M4 12l4-3 4 2 4-5 4 2"/></svg><span>Coupe Météo Hélico</span></div>
+      <div class="tabs" role="tablist" aria-label="Mode">
+        <button type="button" role="tab" id="tabRoute" data-mode="route" aria-selected="true">Trajet</button>
+        <button type="button" role="tab" id="tabPoint" data-mode="point" aria-selected="false">Point</button>
+      </div>
+      <div class="bar-pt" id="barPt">—</div>
+      <button class="icon-btn" id="themeBtn" type="button" aria-label="Changer le thème" title="Thème : automatique"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 7a5 5 0 0 1 0 10z" fill="currentColor"/></svg></button>
+    </div>
+    <div class="bar-r2">
+      <button class="step" id="hPrev" type="button" aria-label="Heure précédente">‹</button>
+      <input type="range" id="hRange" min="0" max="0" value="0" step="1" aria-label="Heure affichée">
+      <button class="step" id="hNext" type="button" aria-label="Heure suivante">›</button>
+      <output class="hlab" id="hLab" for="hRange">—</output>
+    </div>
+  </div>
+</header>
+
+<main class="wrap gut main">
+  <details class="panel setup" id="setup" open>
+    <summary><span class="ptitle" id="setupTitle">Trajet &amp; mission</span><span class="sumline" id="sumLine"></span></summary>
+
+    <div class="rfields" id="routeFields">
+      <div class="rp">
+        <span class="rp-tag" aria-hidden="true">D</span>
+        <div class="rp-l">
+          <label class="fld" for="fDep"><span>Départ</span><input id="fDep" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="43.380, -0.419"></label>
+          <label class="fld" for="fDepName"><span>Nom</span><input id="fDepName" type="text" autocomplete="off" placeholder="Terrain, DZ…"></label>
+          <button class="btn sm" type="button" data-pick="dep" aria-pressed="false">Placer sur la carte</button>
+        </div>
+      </div>
+      <button class="btn sm swap" id="btnSwap" type="button">Inverser départ et arrivée</button>
+      <div class="rp">
+        <span class="rp-tag" aria-hidden="true">A</span>
+        <div class="rp-l">
+          <label class="fld" for="fArr"><span>Arrivée</span><input id="fArr" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="42.807, -0.416"></label>
+          <label class="fld" for="fArrName"><span>Nom</span><input id="fArrName" type="text" autocomplete="off" placeholder="Zone, col, terrain…"></label>
+          <button class="btn sm" type="button" data-pick="arr" aria-pressed="false">Placer sur la carte</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form" id="pointFields" hidden>
+      <label class="fld fld-wide" for="fCoord"><span>Coordonnées</span>
+        <span class="row">
+          <input id="fCoord" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="43.380, -0.419">
+          <button class="btn" id="btnGeo" type="button" title="Utiliser ma position" aria-label="Utiliser ma position"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+        </span>
+      </label>
+      <label class="fld" for="fName"><span>Nom du point</span><input id="fName" type="text" autocomplete="off" placeholder="Zone, DZ, terrain…"></label>
+    </div>
+    <small class="hint" id="coordHint">Formats acceptés : 43.380, -0.419 · 43°22'49"N 0°25'07"W · 4322N00025W</small>
+
+    <div class="form">
+      <label class="fld" for="fModel"><span>Modèle</span><select id="fModel"></select></label>
+      <label class="fld" for="fStart"><span>Début de mission</span><select id="fStart"></select></label>
+      <label class="fld" for="fDur"><span>Durée</span><select id="fDur"></select></label>
+      <label class="fld" for="fCeil"><span>Hauteur affichée</span><select id="fCeil"></select></label>
+      <div class="fld"><span>Heures</span><div class="seg" role="group" aria-label="Affichage des heures"><button type="button" id="tzUtc" aria-pressed="true">UTC</button><button type="button" id="tzLoc" aria-pressed="false">Locale</button></div></div>
+    </div>
+
+    <details class="sub" id="thBox">
+      <summary>Seuils d'alerte : base <span id="thSum"></span></summary>
+      <div class="form">
+        <label class="fld" for="thBaseC"><span>Base critique (ft sol)</span><input id="thBaseC" type="number" inputmode="numeric" min="0" step="50"></label>
+        <label class="fld" for="thBaseM"><span>Base marginale (ft sol)</span><input id="thBaseM" type="number" inputmode="numeric" min="0" step="50"></label>
+        <label class="fld" for="thVisC"><span>Visi critique (m)</span><input id="thVisC" type="number" inputmode="numeric" min="0" step="100"></label>
+        <label class="fld" for="thVisM"><span>Visi marginale (m)</span><input id="thVisM" type="number" inputmode="numeric" min="0" step="100"></label>
+      </div>
+    </details>
+
+    <div class="favs" id="favs"></div>
+    <div class="actions">
+      <button class="btn primary" id="btnLoad" type="button">Charger le trajet</button>
+      <button class="btn" id="btnFav" type="button">Enregistrer le trajet</button>
+      <a class="btn" id="lnkWindy" href="https://www.windy.com" target="_blank" rel="noopener">Voir sur Windy</a>
+    </div>
+    <div class="src" id="srcLine"></div>
+  </details>
+
+  <div class="status" id="status" hidden></div>
+  <div class="demo" id="demoBanner" hidden><span>Exemple : données simulées, ce n'est pas une prévision.</span><button class="btn" id="btnExitDemo" type="button">Charger la vraie prévision</button></div>
+
+  <!-- ===== Mode trajet ===== -->
+  <div class="grid2" id="rtTop" hidden>
+    <section class="panel" id="rtSumP">
+      <h2>Bilan du trajet <span class="h2sub" id="rtSumH"></span></h2>
+      <div class="rthead" id="rtHead"></div>
+      <div id="rtWorst"></div>
+      <div class="synth" id="rtFacts"></div>
+    </section>
+    <section class="panel" id="rtMapP">
+      <h2>Carte <span class="h2sub">points colorés selon base et visibilité</span></h2>
+      <div class="mapbox"><div id="map" role="application" aria-label="Carte du trajet"></div></div>
+      <div class="maphint" id="mapHint">Déplace les repères D et A, ou utilise « Placer sur la carte ».</div>
+    </section>
+  </div>
+
+  <section class="panel" id="rtCutP" hidden>
+    <h2>Coupe le long du trajet <span class="h2sub" id="rtCutH"></span></h2>
+    <div class="selbar" id="rtSel"></div>
+    <div class="cutbox" id="rtCut"></div>
+    <div class="legend" id="rtLegend"></div>
+    <p class="note">Bandeaux sous la coupe : base des nuages puis visibilité, en vert, orange ou rouge selon tes seuils. Touche la coupe pour choisir un point.</p>
+  </section>
+
+  <section class="panel" id="rtFriseP" hidden>
+    <h2>Meilleur créneau <span class="h2sub">pire point du trajet heure par heure</span></h2>
+    <div id="rtFrise"></div>
+  </section>
+
+  <section class="panel" id="rtTblP" hidden>
+    <h2>Détail le long du trajet <span class="h2sub" id="rtTblH"></span></h2>
+    <div id="rtTbl"></div>
+  </section>
+
+  <!-- ===== Mode point ===== -->
+  <section class="panel" id="synthP" hidden>
+    <h2>Synthèse mission <span class="h2sub" id="synthWin"></span></h2>
+    <div class="synth" id="synth"></div>
+  </section>
+
+  <div class="grid2" id="views" hidden>
+    <section class="panel" id="profP">
+      <h2>Coupe verticale <span class="h2sub" id="profH"></span></h2>
+      <div class="chips" id="profChips"></div>
+      <div class="profwrap" id="prof"></div>
+      <div class="legend" id="legend"></div>
+      <div class="tblwrap"><table id="lvlTbl"></table></div>
+    </section>
+    <section class="panel" id="misP">
+      <h2>Évolution sur la mission <span class="h2sub" id="misH"></span></h2>
+      <div id="mis"></div>
+      <p class="note">Touche une colonne ou une heure pour afficher sa coupe. Altitudes en ft AMSL sur le graphique, bases en ft sol.</p>
+    </section>
+  </div>
+
+  <section class="panel" id="cmpP" hidden>
+    <h2>Comparaison des modèles <span class="h2sub" id="cmpH"></span></h2>
+    <p class="note" style="margin:0 0 10px">Si les modèles divergent sur la base ou l'iso 0, la prévision est incertaine : prends la marge du plus pessimiste.</p>
+    <button class="btn wrap" id="btnCmp" type="button">Comparer les 4 modèles</button>
+    <div class="tblwrap" id="cmp"></div>
+  </section>
+
+  <footer class="foot">
+    <p><strong>Aide à la décision.</strong> Sorties brutes de modèles numériques, sans expertise de prévisionniste. Ne remplace pas les produits officiels (TEMSI, TAF, prévision du centre météo) ni l'observation.</p>
+    <p>Base des nuages : deux estimations, la plus basse est retenue. La première vient du modèle choisi (humidité par niveau, nébulosité ≥ 3/8), la seconde est la base calculée par DMI Harmonie AROME (2 km). Visibilité : DMI Harmonie, puis ECMWF IFS 9 km au-delà de son échéance (AROME ne la fournit pas). Relief : Copernicus GLO-90, 90 m. Entre deux points météo, la base est interpolée en altitude puis comparée au relief réel, ce qui fait ressortir les crêtes dans les nuages.</p>
+    <p>Givrage : air saturé (HR ≥ 90 %) entre 0 et −20 °C, fort entre 0 et −10 °C quand HR ≥ 96 %. Vent par tranches interpolé dans le profil du modèle. Les modèles lissent le relief : en montagne, les basses couches réelles diffèrent.</p>
+    <p>Données <a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo.com</a> (CC BY 4.0) à partir de Météo-France, DMI, DWD et ECMWF. Fond de carte OpenTopoMap / OpenStreetMap. Usage non commercial.</p>
+  </footer>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= Constantes ================= */
+const FT = 3.28084, KM_NM = 1 / 1.852;
+const nf = new Intl.NumberFormat('fr-FR');
+const API = {
+  meteofrance: 'https://api.open-meteo.com/v1/meteofrance',
+  forecast: 'https://api.open-meteo.com/v1/forecast',
+  elevation: 'https://api.open-meteo.com/v1/elevation'
+};
+const MF_LEVELS = [1000,950,925,900,850,800,750,700,650,600,550,500];
+const STD_LEVELS = [1000,975,950,925,900,850,800,700,600,500];
+const COMMON_LEVELS = [1000,950,925,900,850,800,700,600,500];
+const ROUTE_TOP_HPA = 600;
+const MODELS = [
+  {key:'arome',  ids:['meteofrance_arome_france','arome_france'], endpoint:'meteofrance', label:'AROME France', short:'AROME', res:'2,5 km', days:3, levels:MF_LEVELS, heights:[20,50,100,150,200], minSp:2.5, noSurf:['vis','fzl']},
+  {key:'arpege', ids:['meteofrance_arpege_europe','arpege_europe'], endpoint:'meteofrance', label:'ARPEGE Europe', short:'ARPEGE', res:'0,1°', days:4, levels:MF_LEVELS, heights:[20,50,100,150,200], minSp:8, noSurf:['vis','fzl']},
+  {key:'icond2', ids:['dwd_icon_d2','icon_d2'], endpoint:'forecast', label:'ICON-D2 (DWD)', short:'ICON-D2', res:'2,2 km', days:3, levels:STD_LEVELS, heights:[80,120,180], minSp:2.5, noSurf:[]},
+  {key:'ecmwf',  ids:['ecmwf_ifs025'], endpoint:'forecast', label:'ECMWF IFS', short:'ECMWF', res:'0,25°', days:6, levels:[1000,925,850,700,600,500], heights:[], minSp:12, noSurf:[]}
+];
+const AUX_ATT = [
+  {id:'dmi_seamless', src:'DMI', vars:['cloud_base','visibility','cloud_cover_2m','cloud_cover_low']},
+  {id:'dmi_harmonie_arome_europe', src:'DMI', vars:['cloud_base','visibility','cloud_cover_2m','cloud_cover_low']},
+  {id:'ecmwf_ifs', src:'ECMWF', vars:['visibility']}
+];
+const SURF = {t2:'temperature_2m', td2:'dew_point_2m', rh2:'relative_humidity_2m', pmsl:'pressure_msl', ps:'surface_pressure',
+  ws10:'wind_speed_10m', wd10:'wind_direction_10m', gust:'wind_gusts_10m', vis:'visibility', pr:'precipitation', sn:'snowfall',
+  wc:'weather_code', cape:'cape', fzl:'freezing_level_height'};
+const SURF_MIN = ['t2','rh2','pmsl','ps','ws10','wd10','gust','pr','wc'];
+const PLV = ['temperature','relative_humidity','wind_speed','wind_direction','geopotential_height'];
+const CEILS = [3000,5000,10000,15000];
+const DURS = [3,6,9,12,18,24,36,48];
+const TRANCHES = [500,1000,2000,3000];
+const BASE_CC = 35, CEIL_CC = 60;
+const TH_DEF = {baseCrit:500, baseMarg:1000, visCrit:1500, visMarg:5000};
+const ICE_TXT = ['', 'Faible', 'Modéré', 'Fort'];
+const STORE = 'cmh.v2';
+const DEFAULT_POINT = {lat:43.3800, lon:-0.4186, name:'Pau-Uzein (LFBP)'};
+const DEFAULT_ARR = {lat:42.8069, lon:-0.4161, name:'Col du Pourtalet'};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ================= État ================= */
+const state = {
+  mode:'route', point:{...DEFAULT_POINT}, dep:{...DEFAULT_POINT}, arr:{...DEFAULT_ARR},
+  modelKey:'arome', ceilFt:10000, tz:'utc', dur:6, th:{...TH_DEF},
+  startU:null, selU:null, favs:[], rfavs:[], theme:'auto',
+  data:null, route:null, demo:false, cmp:null, selK:null, pick:null, dirty:false, busy:false
+};
+const cache = new Map();
+
+const okLoc = p => p && isFinite(p.lat) && isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180;
+function loadSettings(){
+  try {
+    const o = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (!o) return;
+    if (o.mode === 'route' || o.mode === 'point') state.mode = o.mode;
+    if (okLoc(o.point)) state.point = o.point;
+    if (okLoc(o.dep)) state.dep = o.dep;
+    if (okLoc(o.arr)) state.arr = o.arr;
+    if (MODELS.some(m => m.key === o.modelKey)) state.modelKey = o.modelKey;
+    if (CEILS.includes(o.ceilFt)) state.ceilFt = o.ceilFt;
+    if (o.tz === 'utc' || o.tz === 'loc') state.tz = o.tz;
+    if (DURS.includes(o.dur)) state.dur = o.dur;
+    if (Array.isArray(o.favs)) state.favs = o.favs.filter(okLoc).slice(0, 30);
+    if (Array.isArray(o.rfavs)) state.rfavs = o.rfavs.filter(r => r && okLoc(r.dep) && okLoc(r.arr)).slice(0, 30);
+    if (['auto','light','dark'].includes(o.theme)) state.theme = o.theme;
+    if (o.th) for (const k of Object.keys(TH_DEF)) if (isFinite(o.th[k]) && o.th[k] >= 0) state.th[k] = +o.th[k];
+  } catch (e) { /* stockage indisponible */ }
+}
+function saveSettings(){
+  try {
+    const {mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, rfavs, theme, th} = state;
+    localStorage.setItem(STORE, JSON.stringify({mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, rfavs, theme, th}));
+  } catch (e) { /* ignoré */ }
+}
+
+/* ================= Outils météo ================= */
+const lerp = (a, b, f) => a + (b - a) * f;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function dewFromRH(t, rh){
+  if (t == null || rh == null || rh <= 0) return null;
+  const a = 17.625, b = 243.04, g = Math.log(rh / 100) + a * t / (b + t);
+  return b * g / (a - g);
+}
+const ccFromRH = rh => rh == null ? null : clamp((rh - 80) / 18 * 100, 0, 100);
+function fogCC(rh, vis){
+  let c = rh == null ? 0 : clamp((rh - 95) / 4 * 100, 0, 100);
+  if (vis != null && vis < 1000) c = 100; else if (vis != null && vis < 3000) c = Math.max(c, 50);
+  return c;
+}
+function densityAlt(pHpa, tC){
+  const pa = 145366.45 * (1 - Math.pow(pHpa / 1013.25, 0.190284));
+  return pa + 120 * (tC - (15 - 1.98 * pa / 1000));
+}
+const toUV = (ws, wd) => { const r = wd * Math.PI / 180; return {u: -ws * Math.sin(r), v: -ws * Math.cos(r)}; };
+function fromUV(u, v){ const ws = Math.hypot(u, v); let wd = Math.atan2(-u, -v) * 180 / Math.PI; if (wd < 0) wd += 360; return {u, v, ws, wd}; }
+function windAt(W, z){
+  if (!W.length) return null;
+  if (z <= W[0].z) return W[0];
+  for (let k = 1; k < W.length; k++) {
+    if (z <= W[k].z) { const a = W[k-1], b = W[k], f = (z - a.z) / (b.z - a.z); return fromUV(lerp(a.u, b.u, f), lerp(a.v, b.v, f)); }
+  }
+  return null;
+}
+function valAt(pts, key, z){
+  let prev = null;
+  for (const p of pts) {
+    if (p[key] == null) continue;
+    if (p.z >= z) { if (!prev) return p.z - z < 1 ? p[key] : null; return lerp(prev[key], p[key], (z - prev.z) / (p.z - prev.z)); }
+    prev = p;
+  }
+  return null;
+}
+function icing(t, rh, cc){
+  if (t == null || t > 0.5 || t < -20) return 0;
+  const wet = (cc != null && cc >= 50) || (rh != null && rh >= 90);
+  if (!wet) return 0;
+  const veryWet = (rh != null && rh >= 96) || (cc != null && cc >= 85);
+  if (t >= -10 && veryWet) return 3;
+  if (t >= -15) return 2;
+  return 1;
+}
+const WX = {45:'FG',48:'FZFG',51:'-DZ',53:'DZ',55:'+DZ',56:'-FZDZ',57:'FZDZ',61:'-RA',63:'RA',65:'+RA',66:'-FZRA',67:'FZRA',
+  71:'-SN',73:'SN',75:'+SN',77:'SG',80:'-SHRA',81:'SHRA',82:'+SHRA',85:'-SHSN',86:'SHSN',95:'TS',96:'TSGR',99:'+TSGR'};
+const WX_FR = {FG:'brouillard',FZFG:'brouillard givrant',DZ:'bruine',FZDZ:'bruine verglaçante',RA:'pluie',FZRA:'pluie verglaçante',SN:'neige',SG:'neige en grains',SHRA:'averses',SHSN:'averses de neige',TS:'orage',TSGR:'orage avec grêle'};
+const wxSev = c => !c ? '' : /TS|FZ/.test(c) ? 'c' : /SH|SN|FG|\+/.test(c) ? 'w' : '';
+
+/* ================= Géographie ================= */
+const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI, RE = 6371.0088;
+function gcDist(a, b){
+  const p1 = rad(a.lat), p2 = rad(b.lat), dp = p2 - p1, dl = rad(b.lon - a.lon);
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * RE * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function bearing(a, b){
+  const p1 = rad(a.lat), p2 = rad(b.lat), dl = rad(b.lon - a.lon);
+  const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+function gcInterp(a, b, f){
+  const d = gcDist(a, b) / RE;
+  if (d < 1e-9) return {lat:a.lat, lon:a.lon};
+  const A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+  const p1 = rad(a.lat), l1 = rad(a.lon), p2 = rad(b.lat), l2 = rad(b.lon);
+  const x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+  const y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+  const z = A * Math.sin(p1) + B * Math.sin(p2);
+  return {lat:deg(Math.atan2(z, Math.hypot(x, y))), lon:deg(Math.atan2(y, x))};
+}
+
+/* ================= Formatage ================= */
+const r100 = ft => Math.round(ft / 100) * 100;
+const fmtFt = m => nf.format(r100(m * FT));
+const aglFt = (z, E) => Math.max(0, (z - E) * FT);
+const fmtAgl = (z, E) => nf.format(r100(aglFt(z, E)));
+const fmtDir = wd => String((Math.round(wd / 10) * 10) % 360 || 360).padStart(3, '0');
+const fmtWind = (wd, ws) => ws == null ? '—' : ws < 2.5 ? 'calme' : `${fmtDir(wd)}/${Math.round(ws)}`;
+const fmtVis = m => m == null ? '—' : m >= 10000 ? '≥10' : (m / 1000).toFixed(m < 5000 ? 1 : 0).replace('.', ',');
+const fmtNm = km => { const n = km * KM_NM; return n < 10 ? n.toFixed(1).replace('.', ',') : String(Math.round(n)); };
+const pad2 = n => String(n).padStart(2, '0');
+const fmtZ = u => pad2(new Date(u * 1000).getUTCHours()) + 'Z';
+const fmtL = u => pad2(new Date(u * 1000).getHours()) + 'h';
+const fmtDay = (u, utc) => new Date(u * 1000).toLocaleDateString('fr-FR', utc ? {weekday:'short', day:'numeric', timeZone:'UTC'} : {weekday:'short', day:'numeric'});
+const dayKey = (u, utc) => utc ? new Date(u * 1000).getUTCDate() : new Date(u * 1000).getDate();
+const hMain = u => state.tz === 'utc' ? fmtZ(u) : fmtL(u);
+const hSec = u => state.tz === 'utc' ? fmtL(u) + ' loc' : fmtZ(u);
+const hLong = u => `${fmtDay(u, state.tz === 'utc')} ${hMain(u)} (${hSec(u)})`;
+const modelOf = key => MODELS.find(m => m.key === key) || MODELS[0];
+const fmtCoord = p => `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
+function fmtDM(p){
+  const f = (v, pos, neg, dl) => { const a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60; return `${String(d).padStart(dl,'0')}°${m.toFixed(1).padStart(4,'0').replace('.', ',')}'${v >= 0 ? pos : neg}`; };
+  return `${f(p.lat,'N','S',2)} ${f(p.lon,'E','W',3)}`;
+}
+const nameOf = p => p.name || fmtDM(p);
+const shortName = p => { const n = nameOf(p); return n.length > 22 ? n.slice(0, 21) + '…' : n; };
+
+/* Sévérités (seuils réglables) */
+const sevBase = ft => ft == null ? '' : ft < state.th.baseCrit ? 'c' : ft < state.th.baseMarg ? 'w' : '';
+const sevVis = m => m == null ? '' : m < state.th.visCrit ? 'c' : m < state.th.visMarg ? 'w' : '';
+const sevGust = kt => kt == null ? '' : kt >= 35 ? 'c' : kt >= 25 ? 'w' : '';
+const sevW10 = kt => kt == null ? '' : kt >= 30 ? 'c' : kt >= 20 ? 'w' : '';
+const sevWalt = kt => kt == null ? '' : kt >= 45 ? 'c' : kt >= 30 ? 'w' : '';
+const sevSh = v => v == null ? '' : v >= 40 ? 'c' : v >= 20 ? 'w' : '';
+const sevCape = v => v == null ? '' : v >= 1000 ? 'c' : v >= 300 ? 'w' : '';
+const sevPr = v => v == null ? '' : v >= 4 ? 'c' : v >= 1 ? 'w' : '';
+const RANK = {'':0, n:0, o:1, w:2, c:3};
+const worse = (a, b) => RANK[a] >= RANK[b] ? a : b;
+
+/* ================= Coordonnées ================= */
+function parseCoords(input){
+  let s = String(input || '').trim().toUpperCase().replace(/[’′`]/g, "'").replace(/[”″]/g, '"');
+  if (!s) return null;
+  if (!/[NSEWO]/.test(s)) {
+    if (!s.includes('.')) s = s.replace(/(\d),(\d)/g, '$1.$2');
+    const n = s.match(/-?\d+(?:\.\d+)?/g);
+    if (!n || n.length !== 2) return null;
+    const lat = +n[0], lon = +n[1];
+    return (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) ? {lat, lon} : null;
+  }
+  s = s.replace(/(\d),(\d)/g, '$1.$2');
+  const toks = s.match(/[NSEWO]|\d+(?:\.\d+)?/g) || [];
+  const groups = []; let g = {nums:[], hemi:null};
+  for (const t of toks) {
+    if (/^[NSEWO]$/.test(t)) {
+      if (g.nums.length && !g.hemi) { g.hemi = t; groups.push(g); g = {nums:[], hemi:null}; }
+      else { if (g.hemi || g.nums.length) groups.push(g); g = {nums:[], hemi:t}; }
+    } else g.nums.push(t);
+  }
+  if (g.nums.length) groups.push(g);
+  let lat = null, lon = null;
+  for (const gr of groups) {
+    if (!gr.hemi || !gr.nums.length) continue;
+    const isLat = gr.hemi === 'N' || gr.hemi === 'S';
+    let d, m = 0, sec = 0;
+    if (gr.nums.length === 1 && !gr.nums[0].includes('.') && gr.nums[0].length >= (isLat ? 4 : 5)) {
+      const x = gr.nums[0], dl = isLat ? 2 : 3;
+      d = +x.slice(0, dl); m = +x.slice(dl, dl + 2); sec = x.length > dl + 2 ? +x.slice(dl + 2, dl + 4) : 0;
+    } else { d = +gr.nums[0]; m = gr.nums[1] ? +gr.nums[1] : 0; sec = gr.nums[2] ? +gr.nums[2] : 0; }
+    if (m >= 60 || sec >= 60) return null;
+    let v = d + m / 60 + sec / 3600;
+    if (gr.hemi === 'S' || gr.hemi === 'W' || gr.hemi === 'O') v = -v;
+    if (isLat) lat = v; else lon = v;
+  }
+  if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return {lat, lon};
+}
+
+/* ================= Accès aux données ================= */
+const locKey = locs => locs.map(l => `${l.lat.toFixed(4)},${l.lon.toFixed(4)}`).join(';');
+function mainAttempts(model, mode){
+  const top = mode === 'route' ? ROUTE_TOP_HPA : 0;
+  const lv = arr => arr.filter(p => p >= top);
+  const surf = Object.keys(SURF).filter(k => !model.noSurf.includes(k));
+  const red = lv(COMMON_LEVELS.filter(p => model.levels.includes(p)));
+  const out = [], seen = new Set();
+  const add = a => { const k = JSON.stringify([a.id, a.endpoint, a.levels, a.heights, a.hT, a.surf]); if (!seen.has(k)) { seen.add(k); out.push(a); } };
+  for (const id of model.ids) {
+    add({id, endpoint:model.endpoint, levels:lv(model.levels), heights:model.heights, hT:mode === 'point', surf});
+    add({id, endpoint:model.endpoint, levels:red, heights:[], hT:false, surf, reduced:true});
+    add({id, endpoint:'forecast', levels:red, heights:[], hT:false, surf, reduced:true});
+    add({id, endpoint:model.endpoint, levels:red, heights:[], hT:false, surf:SURF_MIN, reduced:true});
+  }
+  return out;
+}
+function mainVars(att){
+  const vars = att.surf.map(k => SURF[k]);
+  for (const p of att.levels) for (const v of PLV) vars.push(`${v}_${p}hPa`);
+  for (const h of att.heights) { if (att.hT) vars.push(`temperature_${h}m`); vars.push(`wind_speed_${h}m`, `wind_direction_${h}m`); }
+  return vars;
+}
+function urlFor(endpoint, locs, params){
+  const q = new URLSearchParams({latitude:locs.map(l => l.lat.toFixed(4)).join(','), longitude:locs.map(l => l.lon.toFixed(4)).join(','), ...params});
+  return `${API[endpoint]}?${q}`;
+}
+async function fetchJSON(url){
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 30000);
+  try {
+    const res = await fetch(url, {signal:ctl.signal});
+    let j = null; try { j = await res.json(); } catch (e) { /* pas de JSON */ }
+    return {res, j};
+  } finally { clearTimeout(tm); }
+}
+const netMsg = e => e && e.name === 'AbortError' ? 'Open-Meteo ne répond pas (délai dépassé).' : 'Pas de connexion à Open-Meteo.';
+const RATE_MSG = 'Limite d’appels gratuits Open-Meteo atteinte. Réessaie dans une minute.';
+function cacheGet(key){ const c = cache.get(key); return c && Date.now() - c.t < 30 * 60 * 1000 ? c.v : null; }
+
+async function getMain(model, locs, mode){
+  if (state.demo) return demoMain(model, locs, mode);
+  const key = `m|${model.key}|${mode}|${locKey(locs)}`;
+  const hit = cacheGet(key); if (hit) return hit;
+  let lastErr = 'réponse invalide', badId = null;
+  for (const att of mainAttempts(model, mode)) {
+    if (att.id === badId) continue;
+    const url = urlFor(att.endpoint, locs, {hourly:mainVars(att).join(','), models:att.id, wind_speed_unit:'kn',
+      timeformat:'unixtime', timezone:'GMT', forecast_days:String(model.days), cell_selection:'land'});
+    let r;
+    try { r = await fetchJSON(url); } catch (e) { throw new Error(netMsg(e)); }
+    if (r.res.status === 429) throw new Error(RATE_MSG);
+    if (r.res.ok && r.j && !r.j.error) {
+      const arr = Array.isArray(r.j) ? r.j : [r.j];
+      if (arr.length === locs.length && arr.every(o => o && o.hourly)) {
+        const Ds = arr.map(o => normalize(o, model, att));
+        cache.set(key, {t:Date.now(), v:Ds});
+        return Ds;
+      }
+      lastErr = 'réponse incomplète';
+    } else {
+      lastErr = (r.j && r.j.reason) || `erreur HTTP ${r.res.status}`;
+      if (/MultiDomains|model/i.test(lastErr) && lastErr.includes(att.id)) badId = att.id;
+    }
+    if (r.res.status >= 500) break;
+  }
+  throw new Error(`Open-Meteo a refusé la demande ${model.short} : ${lastErr}`);
+}
+async function getAux(locs, days){
+  if (state.demo) return demoAux(locs);
+  const key = `a|${days}|${locKey(locs)}`;
+  const hit = cacheGet(key); if (hit) return hit;
+  for (const att of AUX_ATT) {
+    const url = urlFor('forecast', locs, {hourly:att.vars.join(','), models:att.id, timeformat:'unixtime', timezone:'GMT',
+      forecast_days:String(Math.max(days, 3)), cell_selection:'land'});
+    let r;
+    try { r = await fetchJSON(url); } catch (e) { return null; }
+    if (r.res.status === 429) return null;
+    if (!r.res.ok || !r.j || r.j.error) continue;
+    const arr = Array.isArray(r.j) ? r.j : [r.j];
+    if (arr.length !== locs.length || !arr.every(o => o && o.hourly)) continue;
+    const pick = (h, k) => { const v = h[k] ?? h[`${k}_${att.id}`]; return Array.isArray(v) ? v : null; };
+    const list = arr.map(o => { const h = o.hourly; return {times:h.time || [], cb:pick(h, 'cloud_base'), vis:pick(h, 'visibility'), cc2:pick(h, 'cloud_cover_2m'), ccl:pick(h, 'cloud_cover_low')}; });
+    if (!list.some(a => (a.vis || []).some(v => v != null) || (a.cb || []).some(v => v != null))) continue;
+    const v = {src:att.src, label:att.id, list};
+    cache.set(key, {t:Date.now(), v});
+    return v;
+  }
+  return null;
+}
+async function getElev(locs){
+  if (state.demo) return locs.map(l => demoElevAt(l.lat, l.lon));
+  const key = `e|${locKey(locs)}`;
+  const hit = cacheGet(key); if (hit) return hit;
+  try {
+    const chunks = [];
+    for (let i = 0; i < locs.length; i += 100) chunks.push(locs.slice(i, i + 100));
+    const res = await Promise.all(chunks.map(async c => {
+      const r = await fetchJSON(urlFor('elevation', c, {}));
+      if (!r.res.ok || !r.j || !Array.isArray(r.j.elevation) || r.j.elevation.length !== c.length) throw new Error('élévation');
+      return r.j.elevation;
+    }));
+    const v = res.flat().map(z => Number.isFinite(z) ? z : 0);
+    cache.set(key, {t:Date.now(), v});
+    return v;
+  } catch (e) { return null; }
+}
+function normalize(j, model, att){
+  const h = j.hourly || {}; const times = h.time || []; const N = times.length;
+  const arr = k => { const v = h[k] ?? h[`${k}_${att.id}`]; return Array.isArray(v) ? v : new Array(N).fill(null); };
+  const has = a => a.some(v => v != null);
+  const s = {}; for (const [k, v] of Object.entries(SURF)) s[k] = arr(v);
+  const levels = att.levels.map(p => ({p, t:arr(`temperature_${p}hPa`), rh:arr(`relative_humidity_${p}hPa`),
+    ws:arr(`wind_speed_${p}hPa`), wd:arr(`wind_direction_${p}hPa`), z:arr(`geopotential_height_${p}hPa`)}))
+    .filter(L => has(L.z) && has(L.t));
+  const heights = att.heights.map(m => ({h:m, t:att.hT ? arr(`temperature_${m}m`) : null, ws:arr(`wind_speed_${m}m`), wd:arr(`wind_direction_${m}m`)}))
+    .filter(H => has(H.ws));
+  const valid = [];
+  for (let i = 0; i < N; i++) if (s.t2[i] != null || levels.some(L => L.t[i] != null)) valid.push(i);
+  return {model, id:att.id, reduced:!!att.reduced, lat:j.latitude, lon:j.longitude, E:Number.isFinite(j.elevation) ? j.elevation : 0,
+    times, N, s, levels, heights, valid, fetchedAt:Date.now(), prof:new Map(), ax:null};
+}
+function attachAux(D, src, a){
+  D.prof.clear();
+  if (!a) { D.ax = null; return; }
+  const idx = new Map(a.times.map((t, i) => [t, i]));
+  const pick = arr => D.times.map(t => { const i = idx.get(t); return i == null || !arr ? null : (arr[i] ?? null); });
+  D.ax = {src, cb:pick(a.cb), vis:pick(a.vis), cc2:pick(a.cc2), ccl:pick(a.ccl)};
+}
+
+/* ================= Profil à une heure ================= */
+function profileAt(D, i){
+  if (D.prof.has(i)) return D.prof.get(i);
+  const s = D.s, E = D.E, ax = D.ax;
+  const P = {i, ok:false, E, rows:[], T:[], W:[], C:[], cells:[], iceSeg:[], wt:[]};
+  D.prof.set(i, P);
+  if (i < 0 || i >= D.N) return P;
+  const axv = k => ax && ax[k] ? ax[k][i] : null;
+  const visA = axv('vis'), visM = s.vis[i];
+  P.vis = visA ?? visM;
+  P.visSrc = visA != null ? ax.src : visM != null ? D.model.short : '';
+  const cc2 = axv('cc2');
+  const rows = [];
+  if (s.t2[i] != null) {
+    const td = s.td2[i] ?? dewFromRH(s.t2[i], s.rh2[i]);
+    rows.push({z:E + 2, kind:'sfc', lab:'Sol', p:s.ps[i], t:s.t2[i], td, rh:s.rh2[i],
+      cc:Math.max(fogCC(s.rh2[i], P.vis), cc2 ?? 0), ws:s.ws10[i], wd:s.wd10[i]});
+  }
+  for (const H of D.heights) {
+    const t = H.t ? H.t[i] : null, ws = H.ws[i];
+    if (ws == null && t == null) continue;
+    rows.push({z:E + H.h, kind:'hgt', lab:`${H.h} m sol`, t, ws, wd:H.wd[i]});
+  }
+  for (const L of D.levels) {
+    const z = L.z[i], t = L.t[i];
+    if (z == null || t == null || z <= E + 15) continue;
+    const rh = L.rh[i];
+    rows.push({z, kind:'pl', lab:`${L.p} hPa`, p:L.p, t, td:dewFromRH(t, rh), rh, cc:ccFromRH(rh), ws:L.ws[i], wd:L.wd[i]});
+  }
+  rows.sort((a, b) => a.z - b.z);
+  if (!rows.length) return P;
+  P.ok = true; P.rows = rows;
+  const sfc = rows.find(r => r.kind === 'sfc');
+  for (const r of rows) {
+    if (r.kind === 'hgt' && sfc && sfc.p != null && r.t != null) {
+      const tk = (sfc.t + r.t) / 2 + 273.15; r.p = sfc.p * Math.exp(-9.80665 * (r.z - sfc.z) / (287.05 * tk));
+    }
+    r.da = (r.p != null && r.t != null) ? densityAlt(r.p, r.t) : null;
+    r.ice = r.kind === 'hgt' ? null : icing(r.t, r.rh, r.cc);
+  }
+  P.sfc = sfc || null;
+  P.T = rows.filter(r => r.t != null);
+  P.W = rows.filter(r => r.ws != null && r.wd != null)
+    .map(r => ({z:r.kind === 'sfc' ? E + 10 : r.z, ws:r.ws, wd:r.wd, ...toUV(r.ws, r.wd)})).sort((a, b) => a.z - b.z);
+  const C = rows.filter(r => r.kind !== 'hgt' && r.cc != null);
+  P.C = C;
+  P.cells = C.map((r, k) => {
+    const z0 = k === 0 ? E : (C[k-1].z + r.z) / 2;
+    const z1 = k === C.length - 1 ? r.z + (k > 0 ? (r.z - C[k-1].z) / 2 : 150) : (r.z + C[k+1].z) / 2;
+    return {z0, z1, cc:r.cc};
+  });
+  const T = P.T;
+  const crossT = th => {
+    if (!T.length) return null;
+    if (T[0].t <= th) return {z:E, sfc:true};
+    for (let k = 1; k < T.length; k++) { const a = T[k-1], b = T[k]; if (a.t > th && b.t <= th) return {z:a.z + (th - a.t) * (b.z - a.z) / (b.t - a.t)}; }
+    return null;
+  };
+  P.iso0 = crossT(0);
+  if (!P.iso0 && s.fzl[i] != null && T.length && s.fzl[i] > T[T.length-1].z) P.iso0 = {z:s.fzl[i], api:true};
+  P.warmNose = false;
+  for (let k = 1; k < T.length; k++) if (T[k-1].t <= 0 && T[k].t > 0.5) { P.warmNose = true; break; }
+  // Givrage tous les 50 m
+  const rhPts = rows.filter(r => r.kind !== 'hgt' && r.rh != null);
+  const zTop = P.cells.length ? P.cells[P.cells.length - 1].z1 : E;
+  let cur = null;
+  for (let z = E; z < zTop; z += 50) {
+    const zm = z + 25, lv = icing(valAt(T, 't', zm), valAt(rhPts, 'rh', zm), valAt(C, 'cc', zm));
+    if (!lv) { cur = null; continue; }
+    if (cur && cur.lvl === lv) cur.z1 = z + 50; else { cur = {z0:z, z1:z + 50, lvl:lv}; P.iceSeg.push(cur); }
+  }
+  // Bases
+  const crossC = th => {
+    if (!C.length) return null;
+    if (C[0].cc >= th) return E;
+    for (let k = 1; k < C.length; k++) { const a = C[k-1], b = C[k]; if (a.cc < th && b.cc >= th) return a.z + (th - a.cc) * (b.z - a.z) / (b.cc - a.cc); }
+    return null;
+  };
+  P.base = crossC(BASE_CC); P.ceil = crossC(CEIL_CC);
+  let bx = null;
+  if (ax && ax.src === 'DMI') {
+    const cb = axv('cb'), ccl = axv('ccl');
+    if (cb != null && cb > 0 && (ccl == null || ccl >= 20)) bx = E + cb;
+    else if ((cc2 != null && cc2 >= 50) || (visA != null && visA < 1000)) bx = E;
+  }
+  P.baseAux = bx;
+  const cands = [];
+  if (P.base != null) cands.push([P.base, D.model.short]);
+  if (bx != null) cands.push([bx, ax.src]);
+  cands.sort((a, b) => a[0] - b[0]);
+  P.baseRet = cands.length ? cands[0][0] : null;
+  P.baseSrc = cands.length ? cands[0][1] : '';
+  P.cuBase = sfc && sfc.td != null ? E + Math.max(0, sfc.t - sfc.td) * 125 / FT : null;
+  // Vent par tranches
+  P.wt = [{lab:'10 m', ft:0, w:sfc && sfc.ws != null ? {ws:sfc.ws, wd:sfc.wd} : null},
+    ...TRANCHES.map(ft => ({lab:`${nf.format(ft)} ft`, ft, w:windAt(P.W, E + ft / FT)}))];
+  // Surface
+  P.pr = s.pr[i]; P.sn = s.sn[i]; P.cape = s.cape[i]; P.gust = s.gust[i]; P.qnh = s.pmsl[i];
+  P.wx = WX[s.wc[i]] || '';
+  P.frza = !!(sfc && sfc.t <= 0.5 && (P.pr || 0) > 0.1 && P.warmNose);
+  if (P.frza && !/FZ/.test(P.wx)) P.wx = 'FZRA?';
+  return P;
+}
+function statsInCeil(P, ceilM){
+  let wmax = null;
+  for (const w of P.W) if (w.z <= ceilM && (!wmax || w.ws > wmax.ws)) wmax = w;
+  let sh = null; const step = 500 / FT;
+  let zp = P.E + 10, wp = windAt(P.W, zp);
+  for (let z = P.E + step; z <= ceilM + 1; z += step) {
+    const w = windAt(P.W, z);
+    if (w && wp) { const v = Math.hypot(w.u - wp.u, w.v - wp.v) * 1000 / ((z - zp) * FT); if (!sh || v > sh.v) sh = {v, z:(z + zp) / 2}; }
+    wp = w; zp = z;
+  }
+  let ice = null;
+  for (const c of P.iceSeg) {
+    if (c.z0 > ceilM) continue;
+    const z1 = Math.min(c.z1, ceilM);
+    if (!ice) ice = {max:c.lvl, z0:c.z0, z1}; else { ice.max = Math.max(ice.max, c.lvl); ice.z0 = Math.min(ice.z0, c.z0); ice.z1 = Math.max(ice.z1, z1); }
+  }
+  return {wmax, sh, ice};
+}
+const iceCompact = ice => ice ? [`${Math.round(ice.z0 * FT / 100)}–${Math.round(ice.z1 * FT / 100)}`, ice.max >= 3 ? 'c' : ice.max >= 2 ? 'w' : ''] : ['—', 'dim'];
+
+/* ================= Fenêtre horaire ================= */
+function effCeilFor(maxFt){
+  const need = maxFt + 2500;
+  if (state.ceilFt >= need) return state.ceilFt;
+  for (const c of CEILS) if (c >= need) return c;
+  return Math.ceil(need / 3000) * 3000;
+}
+const effCeil = D => effCeilFor(D ? D.E * FT : 0);
+const effCeilR = R => effCeilFor(R.maxZ * FT);
+const altTicks = c => { const st = c <= 3000 ? 500 : c <= 10000 ? 1000 : 3000; const t = []; for (let a = 0; a <= c + 1; a += st) t.push(a); return t; };
+
+function curSet(){
+  if (state.mode === 'route') { const R = state.route; return R ? {times:R.times, valid:R.valid, demo:R.demo} : null; }
+  const D = state.data; return D ? {times:D.times, valid:D.valid, demo:D.demo} : null;
+}
+const validTimes = () => { const c = curSet(); return c ? c.valid.map(i => c.times[i]) : []; };
+function clampWindow(){
+  const vt = validTimes(); if (!vt.length) return;
+  const u0 = vt[0], u1 = vt[vt.length - 1];
+  const nowH = Math.floor(Date.now() / 3600000) * 3600;
+  const demo = curSet().demo;
+  if (state.startU == null || state.startU < u0 || state.startU > u1 || (!demo && state.startU < nowH - 3 * 3600)) state.startU = clamp(nowH, u0, u1);
+  if (!vt.includes(state.startU)) state.startU = vt.find(u => u >= state.startU) ?? u0;
+  if (state.selU == null || state.selU < state.startU || state.selU > winEnd() || !vt.includes(state.selU)) state.selU = state.startU;
+}
+function winEnd(){ const vt = validTimes(); return Math.min(state.startU + state.dur * 3600, vt[vt.length - 1]); }
+function winTimes(){ const e = winEnd(); return validTimes().filter(u => u >= state.startU && u <= e); }
+
+/* ================= Barbules ================= */
+function barb(x, y, wd, ws, L){
+  if (ws == null || wd == null) return '';
+  if (ws < 2.5) return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" class="barb"/>`;
+  const th = wd * Math.PI / 180, ux = Math.sin(th), uy = -Math.cos(th), px = Math.cos(th), py = Math.sin(th);
+  const P = d => [x + ux * d, y + uy * d];
+  const f = n => n.toFixed(1);
+  const [tx, ty] = P(L);
+  let d = `M${f(x)} ${f(y)}L${f(tx)} ${f(ty)}`, pen = '';
+  let v = Math.round(ws / 5) * 5, pos = L;
+  const st = L * 0.18, F = L * 0.5;
+  while (v >= 50) {
+    const [ax, ay] = P(pos), [bx, by] = P(pos - st * 1.4);
+    pen += `<path d="M${f(ax)} ${f(ay)}L${f(ax + px * F)} ${f(ay + py * F)}L${f(bx)} ${f(by)}Z" class="pen"/>`;
+    pos -= st * 1.9; v -= 50;
+  }
+  while (v >= 10) { const [ax, ay] = P(pos); d += `M${f(ax)} ${f(ay)}l${f(px * F + ux * F * 0.3)} ${f(py * F + uy * F * 0.3)}`; pos -= st; v -= 10; }
+  if (v >= 5) { if (pos === L) pos -= st; const [ax, ay] = P(pos); d += `M${f(ax)} ${f(ay)}l${f((px * F + ux * F * 0.3) * 0.55)} ${f((py * F + uy * F * 0.3) * 0.55)}`; }
+  return `<path d="${d}" class="barb"/>${pen}<circle cx="${f(x)}" cy="${f(y)}" r="1.6" class="stn"/>`;
+}
+function barbAlts(Eft, ceil, coarse){
+  const st = coarse ? (ceil <= 3000 ? 500 : ceil <= 5000 ? 1000 : ceil <= 10000 ? 2000 : 3000) : (ceil <= 5000 ? 500 : ceil <= 10000 ? 1000 : 1500);
+  const out = [Eft + 300];
+  for (let a = Math.ceil((Eft + 300 + st * 0.6) / st) * st; a <= ceil - st * 0.25; a += st) out.push(a);
+  return out;
+}
+
+/* ================= Trajet : évaluation ================= */
+function score(bAgl, vis, ok){
+  if (!ok) return {sB:Infinity, sV:Infinity, score:Infinity, sev:'n', sevB:'n', sevV:'n', lim:''};
+  const t = state.th;
+  const sB = bAgl == null ? Infinity : Math.max(0, bAgl) / Math.max(1, t.baseMarg);
+  const sV = vis == null ? Infinity : vis / Math.max(1, t.visMarg);
+  const sevB = bAgl == null ? 'o' : bAgl < t.baseCrit ? 'c' : bAgl < t.baseMarg ? 'w' : 'o';
+  const sevV = vis == null ? 'n' : vis < t.visCrit ? 'c' : vis < t.visMarg ? 'w' : 'o';
+  return {sB, sV, score:Math.min(sB, sV), sev:worse(sevB, sevV), sevB, sevV, lim:sB <= sV ? 'base' : 'visi'};
+}
+function cmpWorst(a, b){
+  if (a.score !== b.score) return a.score - b.score;
+  const s = x => (isFinite(x.sB) ? x.sB : 9) + (isFinite(x.sV) ? x.sV : 9);
+  if (s(a) !== s(b)) return s(a) - s(b);
+  return (a.bAgl ?? 1e9) - (b.bAgl ?? 1e9);
+}
+function evalRoute(R, u){
+  if (R.ev.has(u)) return R.ev.get(u);
+  const pts = R.w.map((w, k) => {
+    const D = w.D, P = profileAt(D, D.times.indexOf(u));
+    const baseZ = P.ok ? P.baseRet : null;
+    const bAgl = baseZ != null ? (baseZ - P.E) * FT : null;
+    const vis = P.ok ? P.vis : null;
+    return {k, dkm:w.dkm, lat:w.lat, lon:w.lon, P, ok:P.ok, baseZ, bAgl, vis, ...score(bAgl, vis, P.ok)};
+  });
+  let a = 0;
+  const dense = R.dense.map(d => {
+    while (a < pts.length - 2 && pts[a + 1].dkm < d.dkm) a++;
+    const A = pts[a], B = pts[a + 1];
+    const f = clamp((d.dkm - A.dkm) / Math.max(1e-6, B.dkm - A.dkm), 0, 1);
+    const near = f < 0.5 ? A : B;
+    const mix = key => (A[key] != null && B[key] != null && A.ok && B.ok) ? lerp(A[key], B[key], f) : (near.ok ? near[key] : null);
+    const ok = near.ok;
+    const baseZ = mix('baseZ'), vis = mix('vis');
+    const bAgl = baseZ != null ? (baseZ - d.z) * FT : null;
+    return {dkm:d.dkm, lat:d.lat, lon:d.lon, z:d.z, baseZ, bAgl, vis, ok, ...score(bAgl, vis, ok)};
+  });
+  let worst = null;
+  for (const d of dense) if (d.ok && isFinite(d.score) && (!worst || cmpWorst(d, worst) < 0)) worst = d;
+  const okD = dense.filter(d => d.ok);
+  const bMin = okD.reduce((m, d) => d.bAgl != null && (m == null || d.bAgl < m.bAgl) ? d : m, null);
+  const vMin = okD.reduce((m, d) => d.vis != null && (m == null || d.vis < m.vis) ? d : m, null);
+  let masked = 0;
+  for (let j = 1; j < dense.length; j++) if (dense[j].ok && dense[j].bAgl != null && dense[j].bAgl <= 0) masked += dense[j].dkm - dense[j-1].dkm;
+  const r = {u, pts, dense, worst, bMin, vMin, masked, anyOk:pts.some(p => p.ok)};
+  R.ev.set(u, r);
+  return r;
+}
+const nearestK = (R, dkm) => { let best = 0; R.w.forEach((w, k) => { if (Math.abs(w.dkm - dkm) < Math.abs(R.w[best].dkm - dkm)) best = k; }); return best; };
+const selKEff = (R, ev) => state.selK != null ? state.selK : ev.worst ? nearestK(R, ev.worst.dkm) : 0;
+
+/* ================= Trajet : rendu ================= */
+function renderRouteSummary(){
+  const R = state.route, ev = evalRoute(R, state.selU);
+  $('#rtSumH').textContent = hLong(state.selU);
+  $('#rtHead').innerHTML = `<b>${esc(shortName(R.dep))}</b> → <b>${esc(shortName(R.arr))}</b> · ${fmtNm(R.Lkm)} NM (${nf.format(Math.round(R.Lkm))} km) · Rv ${fmtDir(R.brg)}°`;
+  const W = ev.worst;
+  let card;
+  if (!ev.anyOk) card = `<div class="worst"><div class="wl">Point le plus défavorable</div><div class="wv">Pas de données</div><div class="wd">${esc(R.model.short)} ne couvre pas cette heure. Choisis une autre heure ou un autre modèle.</div></div>`;
+  else if (!W) card = `<div class="worst o"><div class="wl"><span class="pill o">RAS</span>Point le plus défavorable</div><div class="wv">Aucun point limitant</div><div class="wd">Pas de base de nuages ni de visibilité réduite détectées sur le trajet.</div></div>`;
+  else {
+    const masked = W.bAgl != null && W.bAgl <= 0;
+    const baseTxt = W.bAgl == null ? 'pas de nuage bas' : masked ? 'relief dans les nuages' : `base ${nf.format(r100(W.bAgl))} ft sol`;
+    const visTxt = W.vis == null ? 'visi non fournie' : `visi ${fmtVis(W.vis)} km`;
+    const lim = W.lim === 'base' ? (masked ? 'relief masqué' : 'base des nuages') : 'visibilité';
+    const pill = W.sev === 'c' ? '<span class="pill c">Critique</span>' : W.sev === 'w' ? '<span class="pill w">Marginal</span>' : '<span class="pill o">Correct</span>';
+    card = `<div class="worst ${W.sev}"><div class="wl">${pill}Point le plus défavorable · limitant : ${lim}</div>` +
+      `<div class="wv">${fmtNm(W.dkm)} NM de ${esc(shortName(R.dep))}</div>` +
+      `<div class="wd">${baseTxt} · ${visTxt} · relief ${nf.format(r100(W.z * FT))} ft</div>` +
+      `<div class="wc">${fmtDM(W)}</div>` +
+      `<div class="wact"><button class="btn sm" type="button" data-act="selworst">Voir dans la coupe</button><button class="btn sm" type="button" data-act="ptworst">Profil vertical ici</button></div></div>`;
+  }
+  $('#rtWorst').innerHTML = card;
+  // Faits
+  const items = [];
+  const it = (l, v, d, s, cls) => items.push(`<div class="si ${s || ''} ${cls || ''}"><div class="l">${l}</div><div class="v">${v}</div><div class="d">${d}</div></div>`);
+  if (ev.bMin) {
+    const m = ev.bMin;
+    if (m.bAgl <= 0) it('Base mini', 'relief masqué', `sur ${fmtNm(ev.masked)} NM · premier à ${fmtNm(m.dkm)} NM`, 'c');
+    else it('Base mini', `${nf.format(r100(m.bAgl))} ft sol`, `à ${fmtNm(m.dkm)} NM · ${fmtFt(m.baseZ)} ft AMSL`, sevBase(m.bAgl) || 'o');
+  } else it('Base mini', 'aucune', 'pas de nuage bas détecté', 'o');
+  if (ev.vMin) it('Visibilité mini', `${fmtVis(ev.vMin.vis)} km`, `à ${fmtNm(ev.vMin.dkm)} NM`, sevVis(ev.vMin.vis) || 'o');
+  else it('Visibilité', 'non fournie', 'source DMI/ECMWF indisponible', '');
+  const zMax = R.dense.reduce((m, d) => d.z > m.z ? d : m, R.dense[0]);
+  it('Relief maxi', `${fmtFt(zMax.z)} ft`, `à ${fmtNm(zMax.dkm)} NM`, '');
+  const ceilM = effCeilR(R) / FT;
+  let ice = null, iso = null;
+  for (const p of ev.pts) {
+    if (!p.ok) continue;
+    const st = statsInCeil(p.P, ceilM);
+    if (st.ice) { if (!ice) ice = {...st.ice, d0:p.dkm, d1:p.dkm}; else { ice.max = Math.max(ice.max, st.ice.max); ice.z0 = Math.min(ice.z0, st.ice.z0); ice.z1 = Math.max(ice.z1, st.ice.z1); ice.d1 = p.dkm; } }
+    if (p.P.iso0 && (!iso || p.P.iso0.z < iso.z)) iso = {z:p.P.iso0.z, sfc:p.P.iso0.sfc, d:p.dkm};
+  }
+  const isoTxt = iso ? ` · iso 0 mini ${iso.sfc ? 'au sol' : fmtFt(iso.z) + ' ft'} à ${fmtNm(iso.d)} NM` : '';
+  if (ice) it('Givrage', ICE_TXT[ice.max], `${fmtFt(ice.z0)} → ${fmtFt(ice.z1)} ft · de ${fmtNm(ice.d0)} à ${fmtNm(ice.d1)} NM${isoTxt}`, ice.max >= 3 ? 'c' : ice.max >= 2 ? 'w' : '');
+  else it('Givrage', 'non', `aucune couche givrante sous ${nf.format(effCeilR(R))} ft${isoTxt}`, 'o');
+  // Vent maxi par tranche
+  const rowsW = [];
+  let gmax = null, sevW = '';
+  [0, ...TRANCHES].forEach((ft, ti) => {
+    let mx = null;
+    for (const p of ev.pts) { if (!p.ok) continue; const w = p.P.wt[ti] && p.P.wt[ti].w; if (w && (!mx || w.ws > mx.ws)) mx = {...w, d:p.dkm}; }
+    const sv = ti === 0 ? sevW10(mx && mx.ws) : sevWalt(mx && mx.ws);
+    sevW = worse(sevW, sv);
+    rowsW.push(`<span>${ti === 0 ? '10 m' : nf.format(ft) + ' ft sol'}</span><span class="${sv}">${mx ? fmtWind(mx.wd, mx.ws) : '—'}${mx ? ` <small>à ${fmtNm(mx.d)} NM</small>` : ''}</span>`);
+  });
+  for (const p of ev.pts) if (p.ok && p.P.gust != null && (!gmax || p.P.gust > gmax.v)) gmax = {v:p.P.gust, d:p.dkm};
+  if (gmax) { const sg = sevGust(gmax.v); sevW = worse(sevW, sg); rowsW.push(`<span>Rafales</span><span class="${sg}">${Math.round(gmax.v)} kt <small>à ${fmtNm(gmax.d)} NM</small></span>`); }
+  items.push(`<div class="si span2 ${sevW}"><div class="l">Vent maxi par tranche</div><div class="wt">${rowsW.join('')}</div></div>`);
+  $('#rtFacts').innerHTML = items.join('');
+}
+
+function renderRouteChart(){
+  const R = state.route, ev = evalRoute(R, state.selU), box = $('#rtCut');
+  $('#rtCutH').textContent = `${hLong(state.selU)} · ${R.model.short}${R.auxSrc ? ' + ' + R.auxSrc : ''}`;
+  const W = Math.max(300, Math.floor(box.clientWidth || 640));
+  const H = W < 560 ? 320 : 380;
+  const Lp = 44, Rp = W - 10, T = 34, B = H - 66;
+  const ceil = effCeilR(R), L = R.Lkm;
+  const xD = d => Lp + d / L * (Rp - Lp);
+  const yF = ft => B - ft / ceil * (B - T), yM = m => yF(m * FT);
+  const f = n => n.toFixed(1);
+  const n = R.w.length, half = L / (n - 1) / 2;
+  let g = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Coupe le long du trajet : relief, nuages, base, givrage, iso 0 et vent"><defs>` +
+    `<clipPath id="rc"><rect x="${Lp}" y="${T}" width="${Rp - Lp}" height="${B - T}"/></clipPath>` +
+    `<pattern id="rhatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" class="hatch"><line x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`;
+  for (const a of altTicks(ceil)) g += `<line x1="${Lp}" x2="${Rp}" y1="${f(yF(a))}" y2="${f(yF(a))}" class="gl"/><text x="${Lp - 5}" y="${f(yF(a) + 3.5)}" text-anchor="end" class="tk">${a ? nf.format(a) : '0'}</text>`;
+  g += `<text x="4" y="12" class="tkh">FT AMSL</text>`;
+  const kSel = selKEff(R, ev);
+  // Nuages et givrage par colonne
+  g += `<g clip-path="url(#rc)">`;
+  for (const p of ev.pts) {
+    if (!p.ok) continue;
+    const x0 = xD(Math.max(0, p.dkm - half)), x1 = xD(Math.min(L, p.dkm + half)), w = Math.max(0.5, x1 - x0);
+    for (const c of p.P.cells) {
+      if (c.cc < 5) continue;
+      const a = c.z0 * FT, b = Math.min(c.z1 * FT, ceil + 200);
+      if (b > a) g += `<rect x="${f(x0)}" y="${f(yF(b))}" width="${f(w)}" height="${f(yF(a) - yF(b))}" class="cl" style="opacity:${(c.cc / 100 * 0.55).toFixed(2)}"/>`;
+    }
+    for (const s of p.P.iceSeg) {
+      const a = s.z0 * FT, b = Math.min(s.z1 * FT, ceil + 200);
+      if (b > a) g += `<rect x="${f(x0)}" y="${f(yF(b))}" width="${f(w)}" height="${f(yF(a) - yF(b))}" fill="url(#rhatch)" style="opacity:${[0, .4, .75, 1][s.lvl]}"/>`;
+    }
+  }
+  // Iso 0
+  let seg = [];
+  const flushIso = () => { if (seg.length > 1) g += `<polyline points="${seg.join(' ')}" class="iso"/>`; seg = []; };
+  for (const p of ev.pts) { if (p.ok && p.P.iso0 && !p.P.iso0.sfc) seg.push(`${f(xD(p.dkm))},${f(yM(p.P.iso0.z))}`); else flushIso(); }
+  flushIso();
+  g += `</g>`;
+  // Relief
+  g += `<polygon points="${f(xD(0))},${B} ${R.dense.map(d => `${f(xD(d.dkm))},${f(Math.max(T, yM(d.z)))}`).join(' ')} ${f(xD(L))},${B}" class="terr"/>`;
+  // Base retenue
+  let bl = [];
+  const flushB = () => { if (bl.length > 1) { const pts = bl.join(' '); g += `<polyline points="${pts}" class="bline-h"/><polyline points="${pts}" class="bline"/>`; } bl = []; };
+  for (const p of ev.pts) { if (p.baseZ != null && p.baseZ * FT <= ceil) bl.push(`${f(xD(p.dkm))},${f(yM(p.baseZ))}`); else flushB(); }
+  flushB();
+  for (const p of ev.pts) if (p.baseZ != null && p.baseZ * FT <= ceil) g += `<circle cx="${f(xD(p.dkm))}" cy="${f(yM(p.baseZ))}" r="2.6" class="bdot"/>`;
+  // Barbules
+  const colPx = (Rp - Lp) / (n - 1), stride = Math.max(1, Math.ceil(30 / colPx));
+  const st = ceil <= 5000 ? 1000 : ceil <= 10000 ? 2000 : 3000;
+  ev.pts.forEach((p, k) => {
+    const xb = xD(p.dkm);
+    if (!p.ok || k % stride || xb < Lp + 14 || xb > Rp - 14) return;
+    for (let a = st; a < ceil; a += st) { if (a < p.P.E * FT + 400) continue; const w = windAt(p.P.W, a / FT); if (w) g += barb(xD(p.dkm), yF(a), w.wd, w.ws, 15); }
+  });
+  // Colonne sélectionnée
+  const ps = R.w[kSel];
+  if (ps) { const x0 = xD(Math.max(0, ps.dkm - half)), x1 = xD(Math.min(L, ps.dkm + half)); g += `<rect x="${f(x0)}" y="${T}" width="${f(Math.max(2, x1 - x0))}" height="${B - T + 46}" rx="2" class="cur-b"/>`; }
+  // Bandeaux base / visi
+  const yb = B + 22, yv = B + 38, hb = 11;
+  g += `<text x="${Lp - 5}" y="${yb + 9}" text-anchor="end" class="stl">BASE</text><text x="${Lp - 5}" y="${yv + 9}" text-anchor="end" class="stl">VISI</text>`;
+  const D = ev.dense;
+  for (let j = 0; j < D.length; j++) {
+    const xa = j === 0 ? xD(0) : xD((D[j-1].dkm + D[j].dkm) / 2), xb = j === D.length - 1 ? xD(L) : xD((D[j].dkm + D[j+1].dkm) / 2);
+    const w = Math.max(0.6, xb - xa + 0.4);
+    g += `<rect x="${f(xa)}" y="${yb}" width="${f(w)}" height="${hb}" class="s-${D[j].sevB}"/><rect x="${f(xa)}" y="${yv}" width="${f(w)}" height="${hb}" class="s-${D[j].sevV}"/>`;
+  }
+  // Axe des distances
+  const Lnm = L * KM_NM;
+  const stepNm = [1, 2, 5, 10, 20, 25, 50, 100].find(s => Lnm / s <= (W < 560 ? 5 : 9)) || 200;
+  for (let nm = 0; nm <= Lnm + 0.01; nm += stepNm) {
+    const x = xD(nm / KM_NM);
+    g += `<line x1="${f(x)}" x2="${f(x)}" y1="${B}" y2="${B + 4}" class="gl0"/><text x="${f(x)}" y="${B + 15}" text-anchor="middle" class="tk">${nm}</text>`;
+  }
+  g += `<text x="${Rp}" y="${H - 4}" text-anchor="end" class="tkh">NM</text>`;
+  g += `<text x="${Lp}" y="${T - 7}" class="da" text-anchor="middle">D</text><text x="${Rp}" y="${T - 7}" class="da" text-anchor="middle">A</text>`;
+  // Pire point
+  const Wp = ev.worst;
+  if (Wp && Wp.sev !== 'o') {
+    const x = xD(Wp.dkm);
+    g += `<line x1="${f(x)}" x2="${f(x)}" y1="${T}" y2="${yv + hb}" class="wst-l"/>`;
+    g += `<path d="M${f(x)} ${T + 2}l-6 -10h12z" class="wst-m"/>`;
+    const lab = `Pire point · ${fmtNm(Wp.dkm)} NM`;
+    const sub = `${Wp.bAgl == null ? 'pas de nuage' : Wp.bAgl <= 0 ? 'relief masqué' : 'base ' + nf.format(r100(Wp.bAgl)) + ' ft'} · ${Wp.vis == null ? 'visi —' : 'visi ' + fmtVis(Wp.vis) + ' km'}`;
+    const tw = Math.max(lab.length, sub.length) * 5.9 + 10;
+    const right = x + tw + 8 < Rp;
+    const bx = right ? x + 6 : x - 6 - tw;
+    g += `<rect x="${f(bx)}" y="${T + 4}" width="${f(tw)}" height="30" rx="4" class="lbl-bg"/>`;
+    g += `<text x="${f(bx + 5)}" y="${T + 16}" class="wst-t">${esc(lab)}</text><text x="${f(bx + 5)}" y="${T + 29}" class="wst-t2">${esc(sub)}</text>`;
+  }
+  g += `</svg>`;
+  box.innerHTML = g;
+  box.dataset.w = String(W);
+  // Barre de sélection
+  const p = ev.pts[kSel];
+  if (p) {
+    const bTxt = p.bAgl == null ? 'pas de nuage bas' : `base ${nf.format(r100(p.bAgl))} ft sol`;
+    $('#rtSel').innerHTML = `<span class="k">Point ${kSel + 1}/${n} · ${fmtNm(p.dkm)} NM</span><span class="mono">${fmtDM(p)}</span>` +
+      `<span>relief ${fmtFt(p.P.E)} ft · ${bTxt} · visi ${fmtVis(p.vis)} km</span>` +
+      `<button class="btn sm" type="button" data-act="ptsel">Profil vertical de ce point</button>`;
+  } else $('#rtSel').innerHTML = '';
+}
+function renderRouteLegend(){
+  const sw = inner => `<svg viewBox="0 0 22 12" aria-hidden="true">${inner}</svg>`;
+  $('#rtLegend').innerHTML = [
+    ['Nuages', sw('<rect x="1" y="1" width="20" height="10" class="cl" style="opacity:.45"/>')],
+    ['Base retenue', sw('<line x1="2" y1="6" x2="20" y2="6" class="bline"/><circle cx="11" cy="6" r="2.6" class="bdot"/>')],
+    ['Givrage', sw('<rect x="1" y="1" width="20" height="10" fill="url(#lgh)"/><defs><pattern id="lgh" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" class="hatch"><line x1="0" y1="0" x2="0" y2="5"/></pattern></defs>')],
+    ['Iso 0 °C', sw('<line x1="1" y1="6" x2="21" y2="6" class="iso"/>')],
+    ['Relief', sw('<rect x="1" y="3" width="20" height="9" class="terr"/>')],
+    ['Pire point', sw('<line x1="11" y1="0" x2="11" y2="12" class="wst-l"/>')]
+  ].map(([l, s]) => `<span>${s}${l}</span>`).join('');
+}
+
+function renderRouteFrise(){
+  const R = state.route, ts = winTimes(), utc = state.tz === 'utc';
+  let hd = '', lastDay = null;
+  const rows = {bil:[], base:[], vis:[], where:[]};
+  for (const u of ts) {
+    const ev = evalRoute(R, u), W = ev.worst, dk = dayKey(u, utc);
+    const dy = (lastDay === null || dk !== lastDay) ? fmtDay(u, utc) : ''; lastDay = dk;
+    hd += `<button type="button" data-u="${u}" class="${u === state.selU ? 'sel' : ''}" aria-label="Afficher ${esc(hLong(u))}"><span class="dy">${esc(dy)}</span><span class="hz">${hMain(u)}</span><span class="hl">${hSec(u)}</span></button>`;
+    const sel = u === state.selU ? ' sel' : '';
+    if (!ev.anyOk) { for (const k of Object.keys(rows)) rows[k].push(`<span class="dim">—</span>`); continue; }
+    const sev = W ? W.sev : 'o';
+    rows.bil.push(`<span class="${sev === 'n' ? 'dim' : sev}${sel}">${sev === 'c' ? 'CRIT' : sev === 'w' ? 'MARG' : 'OK'}</span>`);
+    const b = ev.bMin;
+    rows.base.push(`<span class="${b ? (b.bAgl <= 0 ? 'c' : sevBase(b.bAgl)) : ''}${sel}">${b ? (b.bAgl <= 0 ? 'masq' : nf.format(r100(b.bAgl))) : '—'}</span>`);
+    rows.vis.push(`<span class="${ev.vMin ? sevVis(ev.vMin.vis) : 'dim'}${sel}">${ev.vMin ? fmtVis(ev.vMin.vis) : '—'}</span>`);
+    rows.where.push(`<span class="dim${sel}">${W && W.sev !== 'o' ? fmtNm(W.dkm) : '—'}</span>`);
+  }
+  const labs = `<div class="mhl">${utc ? 'UTC' : 'LOCALE'}</div>` +
+    `<div class="ml mlo"><b>Bilan</b><i>pire point</i></div><div class="ml"><b>Base mini</b><i>ft sol</i></div>` +
+    `<div class="ml mlo"><b>Visi mini</b><i>km</i></div><div class="ml"><b>Pire point</b><i>NM</i></div>`;
+  const body = `<div class="mh">${hd}</div><div class="mr big zb">${rows.bil.join('')}</div><div class="mr">${rows.base.join('')}</div>` +
+    `<div class="mr zb">${rows.vis.join('')}</div><div class="mr">${rows.where.join('')}</div>`;
+  const prev = $('#rtFrise .mx-s') ? $('#rtFrise .mx-s').scrollLeft : null;
+  $('#rtFrise').innerHTML = `<div class="mx" style="--cw:52px"><div class="mx-l">${labs}</div><div class="mx-s"><div class="mx-in" style="width:${ts.length * 52}px">${body}</div></div></div>`;
+  scrollIntoStrip($('#rtFrise .mx-s'), ts.indexOf(state.selU), 52, prev);
+}
+
+function renderRouteTable(){
+  const R = state.route, ev = evalRoute(R, state.selU), m = R.model, CW = 60;
+  const kSel = selKEff(R, ev), kW = ev.worst && ev.worst.sev !== 'o' ? nearestK(R, ev.worst.dkm) : -1;
+  const ceilM = effCeilR(R) / FT;
+  $('#rtTblH').textContent = `${R.w.length} points · ${hLong(state.selU)}`;
+  const hd = ev.pts.map(p => `<button type="button" data-k="${p.k}" class="${p.k === kSel ? 'sel' : ''} ${p.k === kW ? 'wst' : ''}" aria-label="Point à ${fmtNm(p.dkm)} NM"><span class="dy">${p.k === 0 ? 'D' : p.k === R.w.length - 1 ? 'A' : ''}</span><span class="hz">${fmtNm(p.dkm)}</span><span class="hl">NM</span></button>`).join('');
+  const ROWS = [
+    {g:'Relief et nuages'},
+    {b:'Relief', i:'ft', f:p => [fmtFt(p.P.E), '']},
+    {b:'Base retenue', i:'ft sol', f:p => p.bAgl == null ? ['—', ''] : [nf.format(r100(p.bAgl)), sevBase(p.bAgl)]},
+    {b:`Base ${m.short}`, i:'ft sol', f:p => p.P.base != null ? [fmtAgl(p.P.base, p.P.E), ''] : ['—', 'dim']},
+    {b:'Base DMI', i:'ft sol', f:p => p.P.baseAux != null ? [fmtAgl(p.P.baseAux, p.P.E), ''] : ['—', 'dim']},
+    {b:'Visibilité', i:`km ${p0src(ev)}`, f:p => [fmtVis(p.vis), sevVis(p.vis)]},
+    {b:'Temps', f:p => [p.P.wx || '', wxSev(p.P.wx)]},
+    {g:'Vent par tranche'},
+    {b:'10 m', i:'°/kt', f:p => { const w = p.P.wt[0].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevW10(w && w.ws)]; }},
+    {b:'Rafales', i:'kt', f:p => [p.P.gust != null ? Math.round(p.P.gust) : '—', sevGust(p.P.gust)]},
+    ...TRANCHES.map((ft, ti) => ({b:`${nf.format(ft)} ft`, i:'sol', f:p => { const w = p.P.wt[ti + 1].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevWalt(w && w.ws)]; }})),
+    {g:'Givrage'},
+    {b:'Givrage', i:'×100 ft', f:p => iceCompact(statsInCeil(p.P, ceilM).ice)},
+    {b:'Iso 0 °C', i:'ft', f:p => [p.P.iso0 ? (p.P.iso0.sfc ? 'sol' : fmtFt(p.P.iso0.z)) : '—', p.P.iso0 && p.P.iso0.sfc ? 'w' : '']}
+  ];
+  let labs = `<div class="mhl">DIST.</div>`, body = `<div class="mh">${hd}</div>`, z = 0;
+  for (const row of ROWS) {
+    if (row.g) { labs += `<div class="mgrp">${row.g}</div>`; body += `<div class="mgrp"></div>`; z = 0; continue; }
+    labs += `<div class="ml ${z % 2 === 0 ? 'mlo' : ''}"><b>${esc(row.b)}</b>${row.i ? `<i>${esc(row.i)}</i>` : ''}</div>`;
+    body += `<div class="mr ${z % 2 === 0 ? 'zb' : ''}">` + ev.pts.map(p => {
+      if (!p.ok) return `<span class="dim">—</span>`;
+      const [v, sev] = row.f(p);
+      return `<span class="${sev || ''}${p.k === kSel && !sev ? ' sel' : ''}">${esc(v)}</span>`;
+    }).join('') + `</div>`;
+    z++;
+  }
+  const prev = $('#rtTbl .mx-s') ? $('#rtTbl .mx-s').scrollLeft : null;
+  $('#rtTbl').innerHTML = `<div class="mx" style="--cw:${CW}px"><div class="mx-l">${labs}</div><div class="mx-s"><div class="mx-in" style="width:${ev.pts.length * CW}px">${body}</div></div></div>`;
+  scrollIntoStrip($('#rtTbl .mx-s'), kSel, CW, prev);
+}
+const p0src = ev => { const p = ev.pts.find(q => q.ok && q.P.visSrc); return p ? p.P.visSrc : ''; };
+function scrollIntoStrip(sc, idx, cw, prev){
+  if (!sc) return;
+  if (prev != null) sc.scrollLeft = prev;
+  if (idx >= 0) { const x = idx * cw; if (x < sc.scrollLeft || x + cw > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = Math.max(0, x - sc.clientWidth / 2 + cw / 2); }
+}
+
+/* ================= Carte ================= */
+let MAP = null, leafletState = 'loading';
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'; }
+function ensureMap(){
+  if (MAP) return MAP;
+  if (!window.L || leafletState !== 'ready') return null;
+  const m = L.map('map', {zoomControl:true, attributionControl:true, tap:true});
+  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {subdomains:'abc', maxZoom:17,
+    attribution:'Carte © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA) · Données © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'});
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19,
+    attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'});
+  topo.addTo(m);
+  L.control.layers({'Relief (OpenTopoMap)':topo, 'OpenStreetMap':osm}, null, {position:'topright'}).addTo(m);
+  const grp = L.layerGroup().addTo(m);
+  m.setView([state.dep.lat, state.dep.lon], 9);
+  m.on('click', e => {
+    if (!state.pick) return;
+    const which = state.pick;
+    state[which] = {lat:+e.latlng.lat.toFixed(5), lon:+e.latlng.lng.toFixed(5), name:''};
+    setPick(null); routeEdited(); fillRouteInputs(); renderMap(false);
+  });
+  MAP = {m, grp, fitted:''};
+  return MAP;
+}
+function pinIcon(txt){ return L.divIcon({className:'pinwrap', html:`<span class="pin">${txt}</span>`, iconSize:[26, 26], iconAnchor:[13, 13]}); }
+function renderMap(fit){
+  const M = ensureMap(); if (!M) return;
+  M.grp.clearLayers();
+  const R = state.route, sameRoute = R && !state.dirty;
+  const colors = {o:cssVar('--ok'), w:cssVar('--warn'), c:cssVar('--crit'), n:cssVar('--muted')};
+  const routeCol = cssVar('--route');
+  if (sameRoute) {
+    L.polyline(R.dense.map(d => [d.lat, d.lon]), {color:routeCol, weight:4, opacity:.85}).addTo(M.grp);
+    const ev = evalRoute(R, state.selU), kSel = selKEff(R, ev);
+    for (const p of ev.pts) {
+      const c = L.circleMarker([p.lat, p.lon], {radius:p.k === kSel ? 8 : 6, color:p.k === kSel ? cssVar('--ink') : cssVar('--panel'), weight:p.k === kSel ? 2.5 : 1.5, fillColor:colors[p.sev] || colors.n, fillOpacity:.95});
+      c.bindTooltip(`${fmtNm(p.dkm)} NM · ${p.bAgl == null ? 'pas de nuage bas' : 'base ' + nf.format(r100(p.bAgl)) + ' ft sol'} · visi ${fmtVis(p.vis)} km`, {direction:'top'});
+      c.on('click', () => selectPoint(p.k));
+      c.addTo(M.grp);
+    }
+    const W = ev.worst;
+    if (W && W.sev !== 'o') {
+      L.marker([W.lat, W.lon], {icon:L.divIcon({className:'pinwrap', html:'<span class="wpin"></span>', iconSize:[26, 26], iconAnchor:[13, 13]}), zIndexOffset:500})
+        .bindTooltip('Pire point', {permanent:true, direction:'top', offset:[0, -12], className:'wtip'}).addTo(M.grp);
+    }
+  } else {
+    L.polyline([[state.dep.lat, state.dep.lon], [state.arr.lat, state.arr.lon]], {color:routeCol, weight:3, dashArray:'6 6', opacity:.8}).addTo(M.grp);
+  }
+  for (const which of ['dep', 'arr']) {
+    const p = state[which];
+    const mk = L.marker([p.lat, p.lon], {icon:pinIcon(which === 'dep' ? 'D' : 'A'), draggable:true, zIndexOffset:800, title:which === 'dep' ? 'Départ' : 'Arrivée'});
+    mk.on('dragend', e => { const ll = e.target.getLatLng(); state[which] = {lat:+ll.lat.toFixed(5), lon:+ll.lng.toFixed(5), name:''}; routeEdited(); fillRouteInputs(); renderMap(false); });
+    mk.addTo(M.grp);
+  }
+  const key = `${fmtCoord(state.dep)}|${fmtCoord(state.arr)}`;
+  if (fit || M.fitted !== key) {
+    M.m.fitBounds(L.latLngBounds([[state.dep.lat, state.dep.lon], [state.arr.lat, state.arr.lon]]), {padding:[30, 30], maxZoom:12});
+    M.fitted = key;
+  }
+}
+function loadLeaflet(){
+  const sc = document.createElement('script');
+  sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+  sc.onload = () => { leafletState = 'ready'; if (state.mode === 'route') { ensureMap(); setTimeout(() => { if (MAP) { MAP.m.invalidateSize(); renderMap(true); } }, 0); } };
+  sc.onerror = () => { leafletState = 'failed'; $('#mapHint').textContent = 'Carte indisponible (pas de connexion au fond de carte). Saisis les coordonnées à la main.'; $('#map').hidden = true; };
+  document.head.appendChild(sc);
+}
+function setPick(which){
+  state.pick = which;
+  document.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pick === which)));
+  const h = $('#mapHint');
+  if (which) { h.textContent = `Touche la carte pour placer ${which === 'dep' ? 'le départ (D)' : "l'arrivée (A)"}.`; h.classList.add('on'); }
+  else { h.textContent = leafletState === 'failed' ? h.textContent : 'Déplace les repères D et A, ou utilise « Placer sur la carte ».'; h.classList.remove('on'); }
+}
+function routeEdited(){
+  const R = state.route;
+  state.dirty = !R || fmtCoord(R.dep) !== fmtCoord(state.dep) || fmtCoord(R.arr) !== fmtCoord(state.arr);
+  if (state.dirty) setStatus('info', `<p><strong>Trajet modifié.</strong> Appuie sur « Charger le trajet » pour calculer la nouvelle coupe.</p><button class="btn primary" type="button" data-act="load">Charger le trajet</button>`);
+  else setStatus(null);
+  renderTop(); saveSettings();
+}
+
+/* ================= Mode point : coupe verticale ================= */
+function profileSVG(P, D){
+  const ceil = effCeil(D), ceilM = ceil / FT, E = P.E;
+  const W = 360, H = 444, L = 46, R = 262, IX = 268, IW = 12, BX = 318, T = 20, B = 410;
+  const yF = ft => B - (ft / ceil) * (B - T), yM = m => yF(m * FT);
+  const lst = []; for (const r of P.rows) { lst.push(r); if (r.z > ceilM) break; }
+  const vals = []; lst.forEach(r => { if (r.t != null) vals.push(r.t); if (r.td != null && r.kind !== 'hgt') vals.push(r.td); });
+  let tmin = Math.floor((Math.min(...vals) - 1) / 5) * 5, tmax = Math.ceil((Math.max(...vals) + 1) / 5) * 5;
+  if (tmax < 5) tmax = 5; if (tmin > -5) tmin = -5;
+  while (tmax - tmin < 20) tmin -= 5;
+  const xT = t => L + (t - tmin) / (tmax - tmin) * (R - L);
+  const tst = tmax - tmin > 45 ? 10 : 5;
+  const f = n => n.toFixed(1);
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Coupe verticale : température, point de rosée, nuages, givrage et vent en fonction de l'altitude">`;
+  g += `<defs><clipPath id="pc"><rect x="${L}" y="${T}" width="${R - L}" height="${B - T}"/></clipPath></defs>`;
+  for (const a of altTicks(ceil)) g += `<line x1="${L}" x2="${W - 4}" y1="${f(yF(a))}" y2="${f(yF(a))}" class="gl"/><text x="${L - 5}" y="${f(yF(a) + 3.5)}" text-anchor="end" class="tk">${a ? nf.format(a) : '0'}</text>`;
+  for (let t = tmin; t <= tmax; t += tst) g += `<line x1="${f(xT(t))}" x2="${f(xT(t))}" y1="${T}" y2="${B}" class="gl"/><text x="${f(xT(t))}" y="${B + 15}" text-anchor="middle" class="tk">${t}</text>`;
+  g += `<text x="4" y="12" class="tkh">FT AMSL</text><text x="${R}" y="${B + 30}" text-anchor="end" class="tkh">°C</text>`;
+  g += `<text x="${IX + IW / 2}" y="12" text-anchor="middle" class="tkh">GIV</text><text x="${BX}" y="12" text-anchor="middle" class="tkh">VENT KT</text>`;
+  g += `<g clip-path="url(#pc)">`;
+  for (const c of P.cells) { if (c.cc >= 5) g += `<rect x="${L}" y="${f(yM(c.z1))}" width="${R - L}" height="${f(Math.max(0, yM(c.z0) - yM(c.z1)))}" class="cl" style="opacity:${(c.cc / 100 * 0.42).toFixed(2)}"/>`; }
+  g += `<line x1="${f(xT(0))}" x2="${f(xT(0))}" y1="${T}" y2="${B}" class="iso-v"/>`;
+  const line = (key, cls, filt) => {
+    const pts = lst.filter(r => r[key] != null && filt(r));
+    return pts.length ? `<polyline points="${pts.map(r => `${f(xT(r[key]))},${f(yM(r.z))}`).join(' ')}" class="${cls}"/>` : '';
+  };
+  g += line('td', 'ln-td', r => r.kind !== 'hgt') + line('t', 'ln-t', () => true);
+  for (const r of lst) { if (r.z > ceilM) continue; if (r.t != null) g += `<circle cx="${f(xT(r.t))}" cy="${f(yM(r.z))}" r="2.4" class="pt-t"/>`; if (r.td != null && r.kind !== 'hgt') g += `<circle cx="${f(xT(r.td))}" cy="${f(yM(r.z))}" r="2.2" class="pt-td"/>`; }
+  g += `</g>`;
+  for (const c of P.iceSeg) {
+    if (c.z0 > ceilM) continue;
+    const y1 = yM(Math.min(c.z1, ceilM)), y0 = yM(c.z0);
+    g += `<rect x="${IX}" y="${f(y1)}" width="${IW}" height="${f(Math.max(0, y0 - y1))}" class="ice${c.lvl}"/>`;
+  }
+  g += `<rect x="${IX}" y="${T}" width="${IW}" height="${B - T}" class="gl0"/>`;
+  if (P.iso0 && P.iso0.z <= ceilM) {
+    const y = yM(P.iso0.z);
+    g += `<line x1="${L}" x2="${IX + IW}" y1="${f(y)}" y2="${f(y)}" class="iso"/>`;
+    const lab = `0 °C ${P.iso0.sfc ? 'au sol' : fmtFt(P.iso0.z) + ' ft'}`;
+    g += `<rect x="${R - 92}" y="${f(y - 16)}" width="90" height="14" rx="3" class="lbl-bg"/><text x="${R - 4}" y="${f(y - 5)}" text-anchor="end" class="iso-l">${lab}</text>`;
+  }
+  if (P.baseRet != null && P.baseRet <= ceilM) {
+    const y = yM(P.baseRet);
+    const lab = `Base ${fmtAgl(P.baseRet, E)} ft sol (${P.baseSrc})`;
+    g += `<line x1="${L}" x2="${R}" y1="${f(y)}" y2="${f(y)}" class="ceil-d"/>`;
+    g += `<rect x="${L + 2}" y="${f(y - 16)}" width="${(lab.length * 6.1 + 8).toFixed(0)}" height="14" rx="3" class="lbl-bg"/><text x="${L + 5}" y="${f(y - 5)}" class="ceil-l">${esc(lab)}</text>`;
+  }
+  const ey = yM(E);
+  g += `<rect x="${L}" y="${f(ey)}" width="${W - 4 - L}" height="${f(Math.max(0, B - ey))}" class="terr"/>`;
+  if (B - ey > 14) g += `<text x="${L + 5}" y="${f(B - 4)}" class="terr-l">Sol ${fmtFt(E)} ft</text>`;
+  else g += `<text x="${L + 5}" y="${f(ey - 4)}" class="tk">Sol ${fmtFt(E)} ft</text>`;
+  for (const a of barbAlts(E * FT, ceil, false)) { const w = windAt(P.W, a / FT); if (w) g += barb(BX, yF(a), w.wd, w.ws, 22); }
+  g += `</svg>`;
+  return g;
+}
+function renderProfile(){
+  const D = state.data, u = state.selU, i = D.times.indexOf(u);
+  $('#profH').textContent = hLong(u);
+  const P = profileAt(D, i);
+  if (!P.ok) {
+    $('#prof').innerHTML = `<p class="empty">Pas de données ${esc(D.model.short)} à cette heure (hors échéance). Choisis ARPEGE ou ECMWF pour aller plus loin.</p>`;
+    $('#profChips').innerHTML = ''; $('#lvlTbl').innerHTML = ''; return;
+  }
+  const ceil = effCeil(D), ceilM = ceil / FT, E = P.E;
+  const st = statsInCeil(P, ceilM);
+  const chips = [];
+  const chip = (l, v, sev) => chips.push(`<span class="chip ${sev || ''}">${l}<b>${v}</b></span>`);
+  chip('Base', P.baseRet != null ? `${fmtAgl(P.baseRet, E)} ft sol (${P.baseSrc})` : 'aucune', P.baseRet != null ? sevBase(aglFt(P.baseRet, E)) : '');
+  chip('Visi', P.vis != null ? `${fmtVis(P.vis)} km` : 'n/d', sevVis(P.vis));
+  chip('Givrage', st.ice ? `${ICE_TXT[st.ice.max]} ${fmtFt(st.ice.z0)}–${fmtFt(st.ice.z1)}` : 'non', st.ice ? (st.ice.max >= 3 ? 'c' : st.ice.max >= 2 ? 'w' : '') : '');
+  chip('Iso 0', P.iso0 ? (P.iso0.sfc ? 'au sol' : fmtFt(P.iso0.z) + ' ft') : '> données', P.iso0 && P.iso0.z - E < 1000 / FT ? 'w' : '');
+  chip('Plafond', P.ceil != null ? fmtAgl(P.ceil, E) + ' ft sol' : 'aucun', P.ceil != null ? sevBase(aglFt(P.ceil, E)) : '');
+  if (st.wmax) chip('Vent max', `${fmtWind(st.wmax.wd, st.wmax.ws)} à ${fmtFt(st.wmax.z)}`, sevWalt(st.wmax.ws));
+  if (st.sh) chip('Cisaillement', `${Math.round(st.sh.v)} kt/1000 ft`, sevSh(st.sh.v));
+  if (P.qnh != null) chip('QNH', Math.floor(P.qnh), '');
+  if (P.sfc && P.sfc.da != null) chip('Alt. densité sol', nf.format(r100(P.sfc.da)) + ' ft', '');
+  if (P.frza) chip('Pluie verglaçante', 'possible', 'c');
+  $('#profChips').innerHTML = chips.join('');
+  $('#prof').innerHTML = profileSVG(P, D);
+  const rows = P.rows.filter(r => r.z <= ceilM + 1).slice().reverse();
+  let h = '<thead><tr><th>Alt. ft</th><th>Niveau</th><th>T</th><th>Td</th><th>HR</th><th>Néb.</th><th>Vent</th><th>Alt. ρ</th><th>Giv.</th></tr></thead><tbody>';
+  for (const r of rows) {
+    const n = v => v == null ? '<td class="dim">—</td>' : `<td>${v}</td>`;
+    h += `<tr class="${r.kind === 'sfc' ? 'sfc' : ''}"><td>${nf.format(Math.round(r.z * FT / 50) * 50)}</td><td>${esc(r.lab)}</td>` +
+      n(r.t != null ? r.t.toFixed(1).replace('.', ',') : null) + n(r.kind !== 'hgt' && r.td != null ? r.td.toFixed(1).replace('.', ',') : null) +
+      n(r.rh != null ? Math.round(r.rh) + ' %' : null) + n(r.kind !== 'hgt' && r.cc != null ? Math.round(r.cc) + ' %' : null) +
+      `<td class="${sevWalt(r.ws)}">${r.ws != null ? fmtWind(r.wd, r.ws) : '—'}</td>` + n(r.da != null ? nf.format(r100(r.da)) : null) +
+      `<td class="${r.ice >= 3 ? 'c' : r.ice >= 2 ? 'w' : r.ice ? '' : 'dim'}">${r.ice ? ICE_TXT[r.ice] : '—'}</td></tr>`;
+  }
+  $('#lvlTbl').innerHTML = h + '</tbody>';
+}
+
+/* ================= Mode point : mission ================= */
+const COLW = 48, MH = 280, MT = 8, MB = MH - 6;
+function missionRows(D){
+  const ceilM = effCeil(D) / FT;
+  return [
+    {g:'Nuages et visi'},
+    {b:'Base retenue', i:'ft sol', f:P => P.baseRet != null ? [fmtAgl(P.baseRet, P.E), sevBase(aglFt(P.baseRet, P.E))] : ['—', '']},
+    {b:`Base ${D.model.short}`, i:'ft sol', f:P => P.base != null ? [fmtAgl(P.base, P.E), ''] : ['—', 'dim']},
+    {b:'Base DMI', i:'ft sol', f:P => P.baseAux != null ? [fmtAgl(P.baseAux, P.E), ''] : ['—', 'dim']},
+    {b:'Plafond', i:'ft sol', f:P => P.ceil != null && (P.ceil - P.E) * FT < 20000 ? [fmtAgl(P.ceil, P.E), ''] : ['—', 'dim']},
+    {b:'Visibilité', i:'km', f:P => [fmtVis(P.vis), sevVis(P.vis)]},
+    {b:'Temps', f:P => [P.wx || '', wxSev(P.wx)]},
+    {g:'Vent par tranche'},
+    {b:'10 m', i:'°/kt', f:P => { const w = P.wt[0].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevW10(w && w.ws)]; }},
+    {b:'Rafales', i:'kt', f:P => [P.gust != null ? Math.round(P.gust) : '—', sevGust(P.gust)]},
+    ...TRANCHES.map((ft, ti) => ({b:`${nf.format(ft)} ft`, i:'sol', f:P => { const w = P.wt[ti + 1].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevWalt(w && w.ws)]; }})),
+    {g:'Givrage et divers'},
+    {b:'Givrage', i:'×100 ft', f:P => iceCompact(statsInCeil(P, ceilM).ice)},
+    {b:'Iso 0 °C', i:'ft', f:P => [P.iso0 ? (P.iso0.sfc ? 'sol' : fmtFt(P.iso0.z)) : '—', P.iso0 && (P.iso0.z - P.E) * FT < 1000 ? 'w' : '']},
+    {b:'QNH', i:'hPa', f:P => [P.qnh != null ? Math.floor(P.qnh) : '—', '']},
+    {b:'Précip.', i:'mm/h', f:P => [P.pr ? P.pr.toFixed(1).replace('.', ',') : '0', sevPr(P.pr)]}
+  ];
+}
+function renderMission(){
+  const D = state.data, ts = winTimes(), idxs = ts.map(u => D.times.indexOf(u)), n = idxs.length, E = D.E;
+  const ceil = effCeil(D), Wd = n * COLW;
+  const yF = ft => MB - (ft / ceil) * (MB - MT), yM = m => yF(m * FT);
+  const f = x => x.toFixed(1);
+  $('#misH').textContent = n ? `${hLong(ts[0])} → ${hMain(ts[n-1])}` : '';
+  let ax = `<svg width="86" height="${MH}" viewBox="0 0 86 ${MH}" aria-hidden="true">`;
+  for (const a of altTicks(ceil)) ax += `<text x="80" y="${f(yF(a) + 3.5)}" text-anchor="end" class="tk">${a ? nf.format(a) : '0'}</text>`;
+  ax += `<text x="3" y="${MT + 8}" class="tkh">FT</text></svg>`;
+  let g = `<svg width="${Wd}" height="${MH}" viewBox="0 0 ${Wd} ${MH}" role="img" aria-label="Nuages, givrage, isotherme 0 °C, base et vent heure par heure"><defs>` +
+    `<clipPath id="mc"><rect x="0" y="${MT}" width="${Wd}" height="${MB - MT}"/></clipPath>` +
+    `<pattern id="mh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" class="hatch"><line x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`;
+  for (const a of altTicks(ceil)) g += `<line x1="0" x2="${Wd}" y1="${f(yF(a))}" y2="${f(yF(a))}" class="gl"/>`;
+  const selC = ts.indexOf(state.selU);
+  if (selC >= 0) g += `<rect x="${selC * COLW}" y="0" width="${COLW}" height="${MH}" class="cur"/>`;
+  const isoPts = []; const balts = barbAlts(E * FT, ceil, true);
+  idxs.forEach((i, c) => {
+    const x0 = c * COLW, P = profileAt(D, i);
+    if (c) g += `<line x1="${x0}" x2="${x0}" y1="${MT}" y2="${MB}" class="csep"/>`;
+    if (!P.ok) { g += `<text x="${x0 + COLW / 2}" y="${MT + 40}" text-anchor="middle" class="nd">n/d</text>`; isoPts.push(null); return; }
+    g += `<g clip-path="url(#mc)">`;
+    for (const cell of P.cells) {
+      const a = cell.z0 * FT, b = Math.min(cell.z1 * FT, ceil + 100);
+      if (b > a && cell.cc >= 5) g += `<rect x="${x0 + 1}" y="${f(yF(b))}" width="${COLW - 2}" height="${f(yF(a) - yF(b))}" class="cl" style="opacity:${(cell.cc / 100 * 0.6).toFixed(2)}"/>`;
+    }
+    for (const sgI of P.iceSeg) {
+      const a = sgI.z0 * FT, b = Math.min(sgI.z1 * FT, ceil + 100);
+      if (b > a) g += `<rect x="${x0 + 1}" y="${f(yF(b))}" width="${COLW - 2}" height="${f(yF(a) - yF(b))}" fill="url(#mh)" style="opacity:${[0, .35, .7, 1][sgI.lvl]}"/>`;
+    }
+    g += `</g>`;
+    if (P.baseRet != null && P.baseRet * FT <= ceil) g += `<line x1="${x0 + 7}" x2="${x0 + COLW - 7}" y1="${f(yM(P.baseRet))}" y2="${f(yM(P.baseRet))}" class="ceil"/>`;
+    for (const a of balts) { const w = windAt(P.W, a / FT); if (w) g += barb(x0 + COLW / 2, yF(a), w.wd, w.ws, 16); }
+    isoPts.push(P.iso0 ? [x0 + COLW / 2, yM(P.iso0.z)] : null);
+  });
+  let seg = [], segs = [];
+  isoPts.forEach(p => { if (p) seg.push(p); else { if (seg.length) segs.push(seg); seg = []; } });
+  if (seg.length) segs.push(seg);
+  g += `<g clip-path="url(#mc)">`;
+  for (const sg of segs) {
+    const pts = sg.length === 1 ? [[sg[0][0] - COLW / 2 + 4, sg[0][1]], [sg[0][0] + COLW / 2 - 4, sg[0][1]]] : sg;
+    g += `<polyline points="${pts.map(p => `${f(p[0])},${f(p[1])}`).join(' ')}" class="iso"/>`;
+  }
+  g += `</g>`;
+  const firstIso = isoPts.find(p => p && p[1] > MT + 12 && p[1] < MB - 4);
+  if (firstIso) g += `<rect x="${f(firstIso[0] - 18)}" y="${f(firstIso[1] - 17)}" width="36" height="13" rx="3" class="lbl-bg"/><text x="${f(firstIso[0])}" y="${f(firstIso[1] - 7)}" text-anchor="middle" class="iso-l">0 °C</text>`;
+  const ey = yM(E);
+  g += `<rect x="0" y="${f(ey)}" width="${Wd}" height="${f(Math.max(0, MB - ey))}" class="terr"/>`;
+  if (selC >= 0) g += `<rect x="${selC * COLW + 0.8}" y="0.8" width="${COLW - 1.6}" height="${MH - 1.6}" rx="3" class="cur-b"/>`;
+  g += `</svg>`;
+  const utc = state.tz === 'utc';
+  let hd = '', lastDay = null;
+  ts.forEach((u, c) => {
+    const dk = dayKey(u, utc);
+    const dy = (c === 0 || dk !== lastDay) ? fmtDay(u, utc) : '';
+    lastDay = dk;
+    hd += `<button type="button" data-u="${u}" class="${u === state.selU ? 'sel' : ''}" aria-label="Coupe à ${esc(hLong(u))}"><span class="dy">${esc(dy)}</span><span class="hz">${hMain(u)}</span><span class="hl">${hSec(u)}</span></button>`;
+  });
+  let labs = `<div class="mhl">${utc ? 'UTC' : 'LOCALE'}</div><div style="height:${MH}px">${ax}</div><div class="msep"></div>`;
+  let body = `<div class="mh">${hd}</div><div style="height:${MH}px">${g}</div><div class="msep"></div>`;
+  let z = 0;
+  for (const row of missionRows(D)) {
+    if (row.g) { labs += `<div class="mgrp">${row.g}</div>`; body += `<div class="mgrp"></div>`; z = 0; continue; }
+    labs += `<div class="ml ${z % 2 === 0 ? 'mlo' : ''}"><b>${esc(row.b)}</b>${row.i ? `<i>${esc(row.i)}</i>` : ''}</div>`;
+    body += `<div class="mr ${z % 2 === 0 ? 'zb' : ''}">` + idxs.map((i, c) => {
+      const P = profileAt(D, i);
+      if (!P.ok) return `<span class="dim">—</span>`;
+      const [v, sev] = row.f(P);
+      return `<span class="${sev || ''}${ts[c] === state.selU && !sev ? ' sel' : ''}">${esc(v)}</span>`;
+    }).join('') + `</div>`;
+    z++;
+  }
+  const prevScroll = $('#mis .mx-s') ? $('#mis .mx-s').scrollLeft : null;
+  $('#mis').innerHTML = `<div class="mx"><div class="mx-l">${labs}</div><div class="mx-s"><div class="mx-in" style="width:${Wd}px">${body}</div></div></div>`;
+  scrollIntoStrip($('#mis .mx-s'), selC, COLW, prevScroll);
+}
+
+/* ================= Mode point : synthèse ================= */
+function renderSynth(){
+  const D = state.data, ts = winTimes(), E = D.E, ceil = effCeil(D), ceilM = ceil / FT;
+  $('#synthWin').textContent = ts.length ? `${hLong(ts[0])} → ${hMain(ts[ts.length-1])} · ${D.model.short}${D.ax ? ' + ' + D.ax.src : ''}` : '';
+  let baseMin = null, ceilMin = null, visMin = null, isoMin = null, ice = null, gust = null, w10 = null, sh = null, cape = null,
+    prSum = 0, frza = false, da = null, nOk = 0; const wx = new Set(); const wtMax = TRANCHES.map(() => null);
+  for (const u of ts) {
+    const P = profileAt(D, D.times.indexOf(u)); if (!P.ok) continue; nOk++;
+    const st = statsInCeil(P, ceilM);
+    if (P.baseRet != null && P.baseRet <= ceilM && (!baseMin || P.baseRet < baseMin.z)) baseMin = {z:P.baseRet, src:P.baseSrc, u};
+    if (P.ceil != null && P.ceil <= ceilM && (!ceilMin || P.ceil < ceilMin.z)) ceilMin = {z:P.ceil, u};
+    if (P.vis != null && (!visMin || P.vis < visMin.v)) visMin = {v:P.vis, u, src:P.visSrc};
+    if (P.iso0 && (!isoMin || P.iso0.z < isoMin.z)) isoMin = {z:P.iso0.z, sfc:P.iso0.sfc, u};
+    if (st.ice) { if (!ice) ice = {max:st.ice.max, z0:st.ice.z0, z1:st.ice.z1, u0:u, u1:u}; else { ice.max = Math.max(ice.max, st.ice.max); ice.z0 = Math.min(ice.z0, st.ice.z0); ice.z1 = Math.max(ice.z1, st.ice.z1); ice.u1 = u; } }
+    if (P.gust != null && (!gust || P.gust > gust.v)) gust = {v:P.gust, u};
+    if (P.sfc && P.sfc.ws != null && (!w10 || P.sfc.ws > w10.ws)) w10 = {ws:P.sfc.ws, wd:P.sfc.wd, u};
+    TRANCHES.forEach((ft, ti) => { const w = P.wt[ti + 1].w; if (w && (!wtMax[ti] || w.ws > wtMax[ti].ws)) wtMax[ti] = {...w, u}; });
+    if (st.sh && (!sh || st.sh.v > sh.v)) sh = {...st.sh, u};
+    if (P.cape != null && (!cape || P.cape > cape.v)) cape = {v:P.cape, u};
+    prSum += P.pr || 0; frza = frza || P.frza;
+    if (P.wx) wx.add(P.wx.replace(/[-+?]/g, ''));
+    if (P.sfc && P.sfc.da != null && (!da || P.sfc.da > da.v)) da = {v:P.sfc.da, u};
+  }
+  if (!nOk) { $('#synth').innerHTML = `<p class="empty">Aucune donnée ${esc(D.model.short)} sur cette fenêtre.</p>`; return; }
+  const items = [];
+  const it = (l, v, d, s, cls) => items.push(`<div class="si ${s || ''} ${cls || ''}"><div class="l">${l}</div><div class="v">${v}</div><div class="d">${d}</div></div>`);
+  if (baseMin) it('Base mini', `${fmtAgl(baseMin.z, E)} ft sol`, `à ${hMain(baseMin.u)} · ${baseMin.src}`, sevBase(aglFt(baseMin.z, E)) || 'o');
+  else it('Base mini', 'aucune', `pas de nuage bas sous ${nf.format(ceil)} ft`, 'o');
+  if (visMin) it('Visibilité mini', `${fmtVis(visMin.v)} km`, `à ${hMain(visMin.u)} · ${visMin.src}`, sevVis(visMin.v) || 'o');
+  else it('Visibilité', 'non fournie', 'aucune source disponible : voir TAF', '');
+  if (ice) it('Givrage', ICE_TXT[ice.max], `${fmtFt(ice.z0)} → ${fmtFt(ice.z1)} ft · ${ice.u0 === ice.u1 ? 'à ' + hMain(ice.u0) : hMain(ice.u0) + '–' + hMain(ice.u1)}`, ice.max >= 3 ? 'c' : ice.max >= 2 ? 'w' : '');
+  else it('Givrage', 'non', `aucun niveau saturé entre 0 et −20 °C sous ${nf.format(ceil)} ft`, 'o');
+  const rowsW = [];
+  let sevW = worse(sevW10(w10 && w10.ws), sevGust(gust && gust.v));
+  rowsW.push(`<span>10 m</span><span class="${worse(sevW10(w10 && w10.ws), sevGust(gust && gust.v))}">${w10 ? fmtWind(w10.wd, w10.ws) : '—'}${gust ? ' G' + Math.round(gust.v) : ''}</span>`);
+  TRANCHES.forEach((ft, ti) => { const w = wtMax[ti], sv = sevWalt(w && w.ws); sevW = worse(sevW, sv); rowsW.push(`<span>${nf.format(ft)} ft sol</span><span class="${sv}">${w ? fmtWind(w.wd, w.ws) + ` <small>à ${hMain(w.u)}</small>` : '—'}</span>`); });
+  items.push(`<div class="si span2 ${sevW || 'o'}"><div class="l">Vent maxi par tranche</div><div class="wt">${rowsW.join('')}</div></div>`);
+  if (isoMin) it('Iso 0 °C mini', isoMin.sfc ? 'au sol' : `${fmtFt(isoMin.z)} ft`, `à ${hMain(isoMin.u)}`, isoMin.sfc || (isoMin.z - E) * FT < 1000 ? 'w' : '');
+  else it('Iso 0 °C', 'au-dessus', 'des niveaux disponibles', 'o');
+  if (ceilMin) it('Plafond mini', `${fmtAgl(ceilMin.z, E)} ft sol`, `à ${hMain(ceilMin.u)} · couche ≥ 5/8`, sevBase(aglFt(ceilMin.z, E)) || '');
+  if (sh) it('Cisaillement', `${Math.round(sh.v)} kt/1000 ft`, `vers ${fmtFt(sh.z)} ft à ${hMain(sh.u)}`, sevSh(sh.v) || 'o');
+  const ts_ = [...wx].some(c => /TS/.test(c));
+  if (cape || ts_) it('Convection', ts_ ? 'orage' : `CAPE ${Math.round(cape.v)}`, ts_ ? `CAPE maxi ${cape ? Math.round(cape.v) : '—'} J/kg` : `J/kg maxi à ${hMain(cape.u)}`, ts_ ? 'c' : sevCape(cape && cape.v) || 'o');
+  const kinds = [...wx].map(c => WX_FR[c] || '').filter(Boolean);
+  it('Précipitations', `${prSum.toFixed(1).replace('.', ',')} mm`, frza ? 'pluie verglaçante possible' : kinds.length ? kinds.slice(0, 3).join(', ') : 'cumul sur la fenêtre', frza ? 'c' : sevPr(prSum / Math.max(1, nOk) * 2) || (prSum > 0 ? '' : 'o'));
+  if (da) it('Alt. densité sol maxi', `${nf.format(r100(da.v))} ft`, `à ${hMain(da.u)}`, '');
+  $('#synth').innerHTML = items.join('');
+}
+
+/* ================= Mode point : comparaison ================= */
+function renderCompare(){
+  const box = $('#cmp'), c = state.cmp;
+  $('#cmpH').textContent = state.selU ? hLong(state.selU) : '';
+  if (!c) { box.innerHTML = ''; return; }
+  if (c.loading) { box.innerHTML = `<div class="status" style="margin-top:10px"><div class="spin"></div><p>Chargement des modèles…</p></div>`; return; }
+  const cols = c.res.map(r => {
+    if (r.err) return {m:r.m, err:r.err};
+    const D = r.D, P = profileAt(D, D.times.indexOf(state.selU));
+    if (!P.ok) return {m:r.m, err:'hors échéance ou hors domaine'};
+    return {m:r.m, D, P, st:statsInCeil(P, effCeil(D) / FT)};
+  });
+  const rows = [
+    ['Base modèle (ft sol)', x => x.P.base != null ? [fmtAgl(x.P.base, x.P.E), sevBase(aglFt(x.P.base, x.P.E))] : ['aucune', '']],
+    ['Plafond (ft sol)', x => x.P.ceil != null ? [fmtAgl(x.P.ceil, x.P.E), ''] : ['aucun', '']],
+    ['Iso 0 °C (ft)', x => [x.P.iso0 ? (x.P.iso0.sfc ? 'sol' : fmtFt(x.P.iso0.z)) : '—', '']],
+    ['Vent 10 m', x => [x.P.sfc ? fmtWind(x.P.sfc.wd, x.P.sfc.ws) : '—', sevW10(x.P.sfc && x.P.sfc.ws)]],
+    ['Rafales (kt)', x => [x.P.gust != null ? Math.round(x.P.gust) : '—', sevGust(x.P.gust)]],
+    ['Vent 1 000 ft sol', x => { const w = x.P.wt[2].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevWalt(w && w.ws)]; }],
+    ['Vent 3 000 ft sol', x => { const w = x.P.wt[4].w; return [w ? fmtWind(w.wd, w.ws) : '—', sevWalt(w && w.ws)]; }],
+    ['Givrage', x => [x.st.ice ? `${ICE_TXT[x.st.ice.max]} ${fmtFt(x.st.ice.z0)}–${fmtFt(x.st.ice.z1)}` : 'non', x.st.ice ? (x.st.ice.max >= 3 ? 'c' : x.st.ice.max >= 2 ? 'w' : '') : '']],
+    ['QNH (hPa)', x => [x.P.qnh != null ? Math.floor(x.P.qnh) : '—', '']],
+    ['Précip. (mm/h)', x => [x.P.pr != null ? x.P.pr.toFixed(1).replace('.', ',') : '—', sevPr(x.P.pr)]]
+  ];
+  let h = `<table class="cmp"><thead><tr><th></th>${cols.map(x => `<th>${esc(x.m.short)}</th>`).join('')}</tr></thead><tbody>`;
+  for (const [lab, fn] of rows) h += `<tr><td>${lab}</td>` + cols.map(x => { if (x.err) return `<td class="dim">—</td>`; const [v, s] = fn(x); return `<td class="${s}">${esc(v)}</td>`; }).join('') + `</tr>`;
+  h += '</tbody></table>';
+  const errs = cols.filter(x => x.err).map(x => `${x.m.short} : ${x.err}`);
+  if (errs.length) h += `<p class="note">${esc(errs.join(' · '))}</p>`;
+  box.innerHTML = h;
+}
+async function runCompare(){
+  const locs = [{lat:state.point.lat, lon:state.point.lon}];
+  state.cmp = {loading:true}; renderCompare();
+  const res = await Promise.all(MODELS.map(async m => {
+    try { const Ds = await getMain(m, locs, 'point'); return {m, D:Ds[0]}; }
+    catch (e) { return {m, err:e.message}; }
+  }));
+  state.cmp = {res}; renderCompare();
+}
+
+/* ================= Rendu général ================= */
+function renderHour(){
+  const ts = winTimes();
+  const k = Math.max(0, ts.indexOf(state.selU));
+  const r = $('#hRange'); r.max = String(Math.max(0, ts.length - 1)); r.value = String(k);
+  $('#hPrev').disabled = k <= 0; $('#hNext').disabled = k >= ts.length - 1;
+  $('#hLab').innerHTML = state.selU ? `${hMain(state.selU)}<small>${esc(fmtDay(state.selU, state.tz === 'utc'))} · ${hSec(state.selU)}</small>` : '—';
+}
+function renderTop(){
+  const m = modelOf(state.modelKey), route = state.mode === 'route';
+  $('#tabRoute').setAttribute('aria-selected', String(route));
+  $('#tabPoint').setAttribute('aria-selected', String(!route));
+  $('#routeFields').hidden = !route; $('#pointFields').hidden = route;
+  $('#setupTitle').textContent = route ? 'Trajet & mission' : 'Point & mission';
+  $('#btnLoad').textContent = route ? 'Charger le trajet' : 'Charger la prévision';
+  $('#btnFav').textContent = route ? 'Enregistrer le trajet' : 'Enregistrer le point';
+  $('#btnLoad').classList.toggle('primary', true);
+  if (route) {
+    const L = gcDist(state.dep, state.arr);
+    $('#barPt').textContent = `${shortName(state.dep)} → ${shortName(state.arr)} · ${m.short}`;
+    $('#sumLine').textContent = `${shortName(state.dep)} → ${shortName(state.arr)} · ${fmtNm(L)} NM · ${m.short} · ${state.dur} h`;
+    const mid = gcInterp(state.dep, state.arr, 0.5);
+    $('#lnkWindy').href = `https://www.windy.com/?${mid.lat.toFixed(3)},${mid.lon.toFixed(3)},${L > 150 ? 7 : L > 60 ? 8 : 9}`;
+  } else {
+    const p = state.point;
+    $('#barPt').textContent = `${p.name || fmtCoord(p)} · ${m.short}`;
+    $('#sumLine').textContent = `${p.name ? p.name + ' · ' : ''}${fmtDM(p)} · ${m.short} · ${state.dur} h`;
+    $('#lnkWindy').href = `https://www.windy.com/${p.lat.toFixed(3)}/${p.lon.toFixed(3)}?${p.lat.toFixed(3)},${p.lon.toFixed(3)},10`;
+  }
+  $('#thSum').textContent = `${nf.format(state.th.baseCrit)}/${nf.format(state.th.baseMarg)} ft · visi ${nf.format(state.th.visCrit)}/${nf.format(state.th.visMarg)} m`;
+  const when = t => new Date(t).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  if (route && state.route) {
+    const R = state.route, sp = R.Lkm / (R.w.length - 1);
+    $('#srcLine').textContent = `${R.model.label} (${R.model.res}) sur ${R.w.length} points, tous les ${sp.toFixed(1).replace('.', ',')} km · ` +
+      `base et visibilité : ${R.auxSrc === 'DMI' ? 'DMI Harmonie 2 km' : R.auxSrc === 'ECMWF' ? 'ECMWF IFS 9 km (visi seule)' : 'indisponibles'} · ` +
+      `relief : ${R.demElev ? `Copernicus 90 m sur ${R.dense.length} points` : 'altitude des points météo'} · ${R.demo ? 'données simulées' : 'reçu à ' + when(R.fetchedAt)}`;
+  } else if (!route && state.data) {
+    const D = state.data;
+    $('#srcLine').textContent = `${D.model.label} (${D.model.res}) · point de grille ${D.lat.toFixed(3)}, ${D.lon.toFixed(3)} · altitude ${fmtFt(D.E)} ft · ${D.levels.length} niveaux${D.reduced ? ' (jeu réduit)' : ''} · base et visi : ${D.ax ? D.ax.src : 'indisponibles'} · ${D.demo ? 'données simulées' : 'reçu à ' + when(D.fetchedAt)}`;
+  } else $('#srcLine').textContent = '';
+}
+function fillRouteInputs(){
+  $('#fDep').value = fmtCoord(state.dep); $('#fDepName').value = state.dep.name || '';
+  $('#fArr').value = fmtCoord(state.arr); $('#fArrName').value = state.arr.name || '';
+}
+function fillControls(){
+  fillRouteInputs();
+  $('#fCoord').value = fmtCoord(state.point);
+  $('#fName').value = state.point.name || '';
+  $('#fModel').innerHTML = MODELS.map(m => `<option value="${m.key}" ${m.key === state.modelKey ? 'selected' : ''}>${m.label} · ${m.res}</option>`).join('');
+  $('#fDur').innerHTML = DURS.map(d => `<option value="${d}" ${d === state.dur ? 'selected' : ''}>${d} h</option>`).join('');
+  $('#fCeil').innerHTML = CEILS.map(c => `<option value="${c}" ${c === state.ceilFt ? 'selected' : ''}>${nf.format(c)} ft</option>`).join('');
+  $('#tzUtc').setAttribute('aria-pressed', String(state.tz === 'utc'));
+  $('#tzLoc').setAttribute('aria-pressed', String(state.tz === 'loc'));
+  $('#thBaseC').value = state.th.baseCrit; $('#thBaseM').value = state.th.baseMarg;
+  $('#thVisC').value = state.th.visCrit; $('#thVisM').value = state.th.visMarg;
+  renderFavs();
+}
+function fillStart(){
+  const sel = $('#fStart'), vt = validTimes();
+  sel.innerHTML = vt.map(u => `<option value="${u}" ${u === state.startU ? 'selected' : ''}>${esc(fmtDay(u, state.tz === 'utc'))} · ${hMain(u)}</option>`).join('');
+}
+function renderFavs(){
+  if (state.mode === 'route') {
+    $('#favs').innerHTML = state.rfavs.map((r, k) => `<span class="fav"><button type="button" data-rfav="${k}">${esc(shortName(r.dep))} → ${esc(shortName(r.arr))}</button><button type="button" class="x" data-rdel="${k}" aria-label="Retirer ce trajet">×</button></span>`).join('');
+  } else {
+    $('#favs').innerHTML = state.favs.map((f, k) => `<span class="fav"><button type="button" data-fav="${k}">${esc(f.name || fmtCoord(f))}</button><button type="button" class="x" data-del="${k}" aria-label="Retirer ${esc(f.name || 'ce point')}">×</button></span>`).join('');
+  }
+}
+function renderLegend(){
+  const sw = inner => `<svg viewBox="0 0 22 12" aria-hidden="true">${inner}</svg>`;
+  $('#legend').innerHTML = [
+    ['T', sw('<line x1="1" y1="6" x2="21" y2="6" class="ln-t"/>')],
+    ['Td', sw('<line x1="1" y1="6" x2="21" y2="6" class="ln-td"/>')],
+    ['Iso 0 °C', sw('<line x1="1" y1="6" x2="21" y2="6" class="iso"/>')],
+    ['Nuages', sw('<rect x="1" y="1" width="20" height="10" class="cl" style="opacity:.45"/>')],
+    ['Givrage faible / modéré / fort', sw('<rect x="1" y="1" width="6" height="10" class="ice1"/><rect x="8" y="1" width="6" height="10" class="ice2"/><rect x="15" y="1" width="6" height="10" class="ice3"/>')],
+    ['Base retenue', sw('<line x1="2" y1="6" x2="20" y2="6" class="ceil"/>')],
+    ['Relief', sw('<rect x="1" y="3" width="20" height="9" class="terr"/>')]
+  ].map(([l, s]) => `<span>${s}${l}</span>`).join('');
+}
+function renderAll(fitMap){
+  renderTop(); fillStart(); renderFavs();
+  const route = state.mode === 'route';
+  const R = state.route, D = state.data;
+  const hasR = route && !!R, hasP = !route && !!D;
+  $('#rtTop').hidden = !route;
+  $('#rtSumP').hidden = !hasR;
+  $('#rtCutP').hidden = !hasR; $('#rtFriseP').hidden = !hasR; $('#rtTblP').hidden = !hasR;
+  $('#synthP').hidden = !hasP; $('#views').hidden = !hasP; $('#cmpP').hidden = !hasP;
+  $('#demoBanner').hidden = !((hasR && R.demo) || (hasP && D.demo));
+  if (route) {
+    if (MAP) { setTimeout(() => { MAP.m.invalidateSize(); renderMap(!!fitMap); }, 0); }
+    if (hasR) { renderHour(); renderRouteSummary(); renderRouteChart(); renderRouteLegend(); renderRouteFrise(); renderRouteTable(); }
+    else renderHour();
+  } else if (hasP) {
+    renderHour(); renderSynth(); renderProfile(); renderMission(); renderCompare(); renderLegend();
+  } else renderHour();
+}
+function selectHour(u){
+  state.selU = u; renderHour();
+  if (state.mode === 'route' && state.route) { renderRouteSummary(); renderRouteChart(); renderRouteFrise(); renderRouteTable(); renderMap(false); }
+  else if (state.data) { renderProfile(); renderMission(); renderCompare(); }
+}
+function selectPoint(k){
+  state.selK = k;
+  renderRouteChart(); renderRouteTable(); renderMap(false);
+}
+function setStatus(kind, html){
+  const el = $('#status');
+  if (!kind) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false; el.className = 'status' + (kind === 'err' ? ' err' : '');
+  el.innerHTML = html;
+}
+
+/* ================= Chargement ================= */
+function busy(on, msg){
+  state.busy = on; $('#btnLoad').disabled = on;
+  if (on) setStatus('load', `<div class="spin"></div><p>${esc(msg)}</p>`);
+}
+function showLoadError(e){
+  setStatus('err', `<p><strong>${esc(e.message)}</strong><br>Vérifie la connexion, puis réessaie. Tu peux aussi afficher un exemple pour découvrir l'outil.</p><button class="btn primary" type="button" data-act="retry">Réessayer</button><button class="btn" type="button" data-act="demo">Voir un exemple</button>`);
+}
+function collapseOnPhone(){ if (window.matchMedia('(max-width: 719px)').matches) $('#setup').open = false; }
+async function load(){ return state.mode === 'route' ? loadRoute() : loadPoint(); }
+async function loadPoint(){
+  const m = modelOf(state.modelKey), p = state.point;
+  busy(true, `Chargement ${m.label} pour ${p.name || fmtCoord(p)}…`);
+  try {
+    const locs = [{lat:p.lat, lon:p.lon}];
+    const [Ds, ax] = await Promise.all([getMain(m, locs, 'point'), getAux(locs, m.days)]);
+    const D = Ds[0];
+    attachAux(D, ax && ax.src, ax && ax.list[0]);
+    D.demo = state.demo;
+    if (!D.valid.length) throw new Error(`${m.short} ne couvre pas ce point.`);
+    state.data = D; state.cmp = null;
+    clampWindow(); setStatus(null); renderAll(); collapseOnPhone();
+  } catch (e) { showLoadError(e); }
+  finally { busy(false); }
+  saveSettings();
+}
+async function loadRoute(){
+  const m = modelOf(state.modelKey), dep = {...state.dep}, arr = {...state.arr};
+  const Lkm = gcDist(dep, arr);
+  if (Lkm < 0.5) { setStatus('err', '<p><strong>Départ et arrivée sont confondus.</strong> Choisis deux points distincts.</p>'); return; }
+  const n = clamp(Math.round(Lkm / m.minSp) + 1, 3, 31);
+  const wl = Array.from({length:n}, (_, k) => ({...gcInterp(dep, arr, k / (n - 1)), dkm:Lkm * k / (n - 1)}));
+  const nd = clamp(Math.round(Lkm / 0.3) + 1, 30, 200);
+  const dl = Array.from({length:nd}, (_, j) => ({...gcInterp(dep, arr, j / (nd - 1)), dkm:Lkm * j / (nd - 1)}));
+  busy(true, `Chargement ${m.label} sur ${n} points du trajet (${fmtNm(Lkm)} NM)…`);
+  try {
+    const [Ds, ax, el] = await Promise.all([getMain(m, wl, 'route'), getAux(wl, m.days), getElev(dl)]);
+    Ds.forEach((D, k) => attachAux(D, ax && ax.src, ax && ax.list[k]));
+    if (!Ds[0].valid.length) throw new Error(`${m.short} ne couvre pas ce trajet.`);
+    const dense = el ? dl.map((l, j) => ({...l, z:el[j]})) : wl.map((l, k) => ({...l, z:Ds[k].E}));
+    state.route = {dep, arr, Lkm, brg:bearing(dep, arr), w:wl.map((l, k) => ({...l, D:Ds[k]})), dense, maxZ:Math.max(...dense.map(d => d.z)),
+      model:m, times:Ds[0].times, valid:Ds[0].valid, ev:new Map(), auxSrc:ax ? ax.src : null, demElev:!!el, fetchedAt:Date.now(), demo:state.demo};
+    state.selK = null; state.dirty = false;
+    clampWindow(); setStatus(null); renderAll(true); collapseOnPhone();
+  } catch (e) { showLoadError(e); }
+  finally { busy(false); }
+  saveSettings();
+}
+function startDemo(){
+  state.demo = true; state.startU = null; state.selU = null;
+  load().then(() => {
+    const c = curSet(); if (!c) return;
+    const t0 = c.times[0] + 26 * 3600;
+    if (c.times.includes(t0)) { state.startU = t0; state.selU = t0 + 6 * 3600; clampWindow(); renderAll(true); }
+  });
+}
+function stopDemo(){ state.demo = false; state.data = null; state.route = null; state.startU = null; state.selU = null; renderAll(); load(); }
+
+/* ================= Données simulées (mode exemple, hors connexion) ================= */
+function rng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const smooth = x => x * x * (3 - 2 * x);
+const gauss = (k, c, w) => Math.exp(-((k - c) ** 2) / (2 * w * w));
+function demoElevAt(lat, lon){
+  const s = smooth(clamp((43.30 - lat) / 0.48, 0, 1));
+  const r1 = Math.sin(lat * 150 + lon * 40), r2 = Math.sin(lat * 470 - lon * 120);
+  return Math.round(Math.max(60, 175 + 1450 * s + (260 * Math.max(0, r1) + 110 * r2) * (0.25 + 1.2 * s)));
+}
+function demoWx(mkey, lat, lon, E, k){
+  const off = {arome:0, arpege:1.5, icond2:-1, ecmwf:2.5}[mkey] || 0;
+  const s = smooth(clamp((43.30 - lat) / 0.48, 0, 1));
+  const hr = k % 24, di = Math.sin((hr - 9) / 24 * 2 * Math.PI);
+  const fr = gauss(k, 31 + off, 6), post = 1 / (1 + Math.exp(-(k - 34 - off) / 2.5));
+  let Zb = null, Zt = null;
+  if (k >= 14 + off && k < 56) {
+    if (k < 28 + off) Zb = lerp(2700, 1500, (k - 14 - off) / 14);
+    else if (k < 42 + off) Zb = 1250 - 250 * s + 120 * Math.sin(k / 2 + lon * 20);
+    else Zb = lerp(1300, 2300, (k - 42 - off) / 14);
+    Zt = Zb + 2400 + 900 * fr;
+  }
+  const fogValley = hr >= 2 && hr <= 8 && k < 14 && E < 450;
+  const ts = 13 + 5 * di - 4 * post;
+  const tAt = z => ts - 6.4 * z / 1000 + (fogValley && z - E < 250 ? -2 + (z - E) / 125 : 0);
+  const rhAt = z => {
+    if (fogValley && z - E < 150) return 99;
+    if (Zb != null && z >= Zb && z <= Zt) return 97 + 2 * Math.sin(z / 300 + k);
+    if (Zb != null && z < Zb && z > Zb - 400) return 82 + 12 * (1 - (Zb - z) / 400);
+    return 55 + 10 * Math.sin(k / 7 + z / 900);
+  };
+  const inCloud = Zb != null && E >= Zb - 30;
+  const pr = Zb != null && k >= 26 + off && k < 44 + off ? (1.1 + 2 * fr) * (0.6 + s) : 0;
+  const vis = inCloud ? 180 + 140 * Math.abs(Math.sin(k + lat * 50)) : fogValley ? 400 : pr > 0 ? Math.max(2500, 9000 - 1800 * pr) : 25000;
+  const ws10 = 5 + 9 * fr + 5 * s + 2 * di, wd = 215 + 80 * post;
+  const wsAt = za => ws10 * (1 + 0.3 * Math.log1p(za / 10)) + za / 1000 * (4 + 8 * fr + 6 * s);
+  const wc = inCloud || fogValley ? 45 : pr > 2.5 ? 63 : pr > 0.2 ? 61 : (Zb != null ? 3 : 1);
+  return {Zb, Zt, s, fr, post, ts, tAt, rhAt, inCloud, pr, vis, ws10, wd, wsAt, wc, fogValley,
+    pmsl:1018 - 10 * gauss(k, 30 + off, 9) + 3 * post, gust:ws10 * 1.5 + 10 * fr * s, cape:30 * Math.max(0, di) + 300 * gauss(k, 44 + off, 3) * s,
+    cb:Zb != null && !inCloud ? (Zb - E) : 0, cc2:inCloud || fogValley ? 100 : 0, ccl:(Zb != null && Zb - E < 3000) ? 85 : fogValley ? 90 : 10};
+}
+function demoMain(model, locs, mode){
+  const att = mainAttempts(model, mode)[0], t0 = Math.floor(Date.now() / 86400000) * 86400, N = model.days * 24;
+  const lim = {arome:51, icond2:48}[model.key];
+  return locs.map(l => {
+    const E = demoElevAt(l.lat, l.lon), r = rng(Math.round(l.lat * 1000 + l.lon * 77));
+    const h = {time:[]};
+    const put = (k, v) => (h[k] || (h[k] = [])).push(v == null ? null : Math.round(v * 10) / 10);
+    for (let k = 0; k < N; k++) {
+      h.time.push(t0 + k * 3600);
+      const w = demoWx(model.key, l.lat, l.lon, E, k), off = lim && k >= lim;
+      const P = (key, v) => put(key, off ? null : v);
+      const t2 = w.tAt(E), rh2 = Math.min(100, w.rhAt(E));
+      const ps = w.pmsl * Math.exp(-9.80665 * E / (287.05 * (t2 + 273.15)));
+      const S = {t2, td2:dewFromRH(t2, rh2), rh2, pmsl:w.pmsl, ps, ws10:w.ws10 + r(), wd10:w.wd % 360, gust:w.gust, vis:model.key === 'ecmwf' ? null : w.vis,
+        pr:w.pr, sn:0, wc:w.wc, cape:w.cape, fzl:null};
+      for (const key of att.surf) P(SURF[key], S[key]);
+      for (const p of att.levels) {
+        let z = E;
+        for (let it = 0; it < 3; it++) { const tm = (t2 + w.tAt(Math.max(E, z))) / 2 + 273.15; z = E + 287.05 * tm / 9.80665 * Math.log(ps / p); }
+        const t = w.tAt(z), rh = clamp(w.rhAt(z) + (r() - .5) * 3, 5, 100), za = Math.max(0, z - E);
+        P(`temperature_${p}hPa`, t); P(`relative_humidity_${p}hPa`, rh); P(`wind_speed_${p}hPa`, w.wsAt(za) + r() * 1.5);
+        P(`wind_direction_${p}hPa`, (w.wd + za / 1000 * 10) % 360); P(`geopotential_height_${p}hPa`, z);
+      }
+      for (const m of att.heights) { if (att.hT) P(`temperature_${m}m`, w.tAt(E + m)); P(`wind_speed_${m}m`, w.wsAt(m)); P(`wind_direction_${m}m`, (w.wd + m / 30) % 360); }
+    }
+    const D = normalize({latitude:l.lat, longitude:l.lon, elevation:E, hourly:h}, model, att);
+    D.demo = true;
+    return D;
+  });
+}
+function demoAux(locs){
+  const t0 = Math.floor(Date.now() / 86400000) * 86400, N = 4 * 24;
+  return {src:'DMI', label:'demo', list:locs.map(l => {
+    const E = demoElevAt(l.lat, l.lon), a = {times:[], cb:[], vis:[], cc2:[], ccl:[]};
+    for (let k = 0; k < N; k++) {
+      const w = demoWx('arome', l.lat, l.lon, E, k + 0.4);
+      a.times.push(t0 + k * 3600); a.cb.push(Math.round(w.cb)); a.vis.push(Math.round(w.vis * 0.9)); a.cc2.push(w.cc2); a.ccl.push(w.ccl);
+    }
+    return a;
+  })};
+}
+
+/* ================= Événements ================= */
+const COORD_HINT = 'Formats acceptés : 43.380, -0.419 · 43°22\'49"N 0°25\'07"W · 4322N00025W';
+function readLoc(coordSel, nameSel, prev){
+  const p = parseCoords($(coordSel).value);
+  if (!p) return null;
+  const name = $(nameSel).value.trim();
+  const moved = Math.abs(p.lat - prev.lat) > 1e-4 || Math.abs(p.lon - prev.lon) > 1e-4;
+  return {lat:p.lat, lon:p.lon, name:name || (moved ? '' : prev.name || '')};
+}
+function hintErr(msg){ const h = $('#coordHint'); if (msg) { h.textContent = msg; h.classList.add('err'); } else { h.textContent = COORD_HINT; h.classList.remove('err'); } }
+function applyForm(){
+  if (state.mode === 'route') {
+    const d = readLoc('#fDep', '#fDepName', state.dep), a = readLoc('#fArr', '#fArrName', state.arr);
+    if (!d || !a) { hintErr(`Coordonnées ${!d ? 'de départ' : "d'arrivée"} non reconnues. ${COORD_HINT}`); return false; }
+    hintErr(null); state.dep = d; state.arr = a; fillRouteInputs(); return true;
+  }
+  const p = readLoc('#fCoord', '#fName', state.point);
+  if (!p) { hintErr(`Coordonnées non reconnues. ${COORD_HINT}`); return false; }
+  hintErr(null); state.point = p; $('#fCoord').value = fmtCoord(p); return true;
+}
+function applyTheme(){
+  const el = document.documentElement;
+  if (state.theme === 'auto') el.removeAttribute('data-theme'); else el.setAttribute('data-theme', state.theme);
+  $('#themeBtn').title = `Thème : ${{auto:'automatique', light:'clair', dark:'sombre'}[state.theme]}`;
+}
+function setMode(mode){
+  if (state.mode === mode) return;
+  state.mode = mode; state.cmp = null; setPick(null); setStatus(null);
+  saveSettings(); renderAll(true);
+  if (mode === 'route' && !MAP && leafletState === 'ready') { ensureMap(); setTimeout(() => { if (MAP) { MAP.m.invalidateSize(); renderMap(true); } }, 0); }
+  const has = mode === 'route' ? state.route : state.data;
+  if (has) { clampWindow(); renderAll(true); }
+  else load();
+}
+function pointFromRoute(p){
+  const R = state.route;
+  state.point = {lat:+p.lat.toFixed(5), lon:+p.lon.toFixed(5), name:`${shortName(R.dep)} +${fmtNm(p.dkm)} NM`};
+  state.data = null;
+  setMode('point');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function wire(){
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  $('#hRange').addEventListener('input', e => { const t = winTimes(); if (t.length) selectHour(t[+e.target.value]); });
+  $('#hPrev').addEventListener('click', () => { const t = winTimes(); const k = t.indexOf(state.selU); if (k > 0) selectHour(t[k - 1]); });
+  $('#hNext').addEventListener('click', () => { const t = winTimes(); const k = t.indexOf(state.selU); if (k < t.length - 1) selectHour(t[k + 1]); });
+  const stripClick = (sel, onCol, cw) => $(sel).addEventListener('click', e => {
+    const b = e.target.closest('button[data-u]'); if (b) { selectHour(+b.dataset.u); return; }
+    const bk = e.target.closest('button[data-k]'); if (bk) { selectPoint(+bk.dataset.k); return; }
+    const inner = e.target.closest('.mx-in'); if (!inner || !onCol) return;
+    onCol(Math.floor((e.clientX - inner.getBoundingClientRect().left) / cw));
+  });
+  stripClick('#mis', c => { const t = winTimes(); if (t[c] != null) selectHour(t[c]); }, COLW);
+  stripClick('#rtFrise', c => { const t = winTimes(); if (t[c] != null) selectHour(t[c]); }, 52);
+  stripClick('#rtTbl', c => { if (state.route && c >= 0 && c < state.route.w.length) selectPoint(c); }, 60);
+  $('#rtCut').addEventListener('click', e => {
+    const R = state.route, svg = e.target.closest('svg'); if (!R || !svg) return;
+    const rect = svg.getBoundingClientRect(), W = +($('#rtCut').dataset.w || rect.width);
+    const x = (e.clientX - rect.left) * W / rect.width, Lp = 44, Rp = W - 10;
+    if (x < Lp - 5 || x > Rp + 5) return;
+    selectPoint(nearestK(R, clamp((x - Lp) / (Rp - Lp), 0, 1) * R.Lkm));
+  });
+  document.addEventListener('click', e => {
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    const act = a.dataset.act, R = state.route;
+    if (act === 'retry' || act === 'load') { if (applyForm()) load(); }
+    else if (act === 'demo') startDemo();
+    else if (act === 'selworst' && R) { const ev = evalRoute(R, state.selU); if (ev.worst) { selectPoint(nearestK(R, ev.worst.dkm)); $('#rtCutP').scrollIntoView({behavior:'smooth', block:'start'}); } }
+    else if (act === 'ptworst' && R) { const ev = evalRoute(R, state.selU); if (ev.worst) pointFromRoute(ev.worst); }
+    else if (act === 'ptsel' && R) { const ev = evalRoute(R, state.selU), p = ev.pts[selKEff(R, ev)]; if (p) pointFromRoute(p); }
+  });
+  $('#fStart').addEventListener('change', e => { state.startU = +e.target.value; state.selU = state.startU; renderAll(); });
+  $('#fDur').addEventListener('change', e => { state.dur = +e.target.value; if (curSet()) { if (state.selU > winEnd()) state.selU = state.startU; renderAll(); } saveSettings(); });
+  $('#fCeil').addEventListener('change', e => { state.ceilFt = +e.target.value; if (state.route) state.route.ev.clear(); renderAll(); saveSettings(); });
+  $('#fModel').addEventListener('change', e => { state.modelKey = e.target.value; if (applyForm()) load(); });
+  const setTz = tz => { state.tz = tz; fillControls(); renderAll(); saveSettings(); };
+  $('#tzUtc').addEventListener('click', () => setTz('utc'));
+  $('#tzLoc').addEventListener('click', () => setTz('loc'));
+  const thChange = () => {
+    const v = id => { const x = parseFloat($(id).value); return isFinite(x) && x >= 0 ? x : null; };
+    const n = {baseCrit:v('#thBaseC'), baseMarg:v('#thBaseM'), visCrit:v('#thVisC'), visMarg:v('#thVisM')};
+    for (const k of Object.keys(n)) if (n[k] != null) state.th[k] = n[k];
+    if (state.th.baseMarg < state.th.baseCrit) state.th.baseMarg = state.th.baseCrit;
+    if (state.th.visMarg < state.th.visCrit) state.th.visMarg = state.th.visCrit;
+    if (state.route) state.route.ev.clear();
+    saveSettings(); renderAll();
+  };
+  ['#thBaseC', '#thBaseM', '#thVisC', '#thVisM'].forEach(id => $(id).addEventListener('change', thChange));
+  $('#btnLoad').addEventListener('click', () => { if (applyForm()) { renderTop(); load(); } });
+  ['#fCoord', '#fName', '#fDep', '#fDepName', '#fArr', '#fArrName'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnLoad').click(); } }));
+  ['#fDep', '#fArr'].forEach(id => $(id).addEventListener('change', () => { if (applyForm()) { routeEdited(); renderMap(false); } }));
+  $('#btnSwap').addEventListener('click', () => { applyForm(); [state.dep, state.arr] = [state.arr, state.dep]; fillRouteInputs(); routeEdited(); renderMap(false); });
+  document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
+    if (!MAP) { hintErr(leafletState === 'failed' ? 'Carte indisponible : saisis les coordonnées.' : 'La carte se charge, réessaie dans un instant.'); return; }
+    setPick(state.pick === b.dataset.pick ? null : b.dataset.pick);
+    if (state.pick) $('#rtMapP').scrollIntoView({behavior:'smooth', block:'center'});
+  }));
+  $('#btnGeo').addEventListener('click', () => {
+    if (!navigator.geolocation) { hintErr('Géolocalisation indisponible sur cet appareil.'); return; }
+    hintErr(null); $('#coordHint').textContent = 'Recherche de la position…';
+    navigator.geolocation.getCurrentPosition(pos => {
+      $('#fCoord').value = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+      $('#fName').value = 'Ma position';
+      $('#coordHint').textContent = `Position trouvée (précision ${Math.round(pos.coords.accuracy)} m). Appuie sur Charger.`;
+    }, err => hintErr(err.code === 1 ? 'Accès à la position refusé : autorise-le dans les réglages du navigateur.' : 'Position introuvable pour le moment.'),
+    {enableHighAccuracy:true, timeout:15000, maximumAge:60000});
+  });
+  $('#btnFav').addEventListener('click', () => {
+    if (!applyForm()) return;
+    if (state.mode === 'route') {
+      const key = r => `${fmtCoord(r.dep)}|${fmtCoord(r.arr)}`, cur = {dep:{...state.dep}, arr:{...state.arr}};
+      state.rfavs = state.rfavs.filter(r => key(r) !== key(cur)); state.rfavs.unshift(cur);
+    } else {
+      const p = state.point;
+      if (!p.name) { p.name = `Point ${fmtDM(p)}`; $('#fName').value = p.name; }
+      state.favs = state.favs.filter(f => Math.abs(f.lat - p.lat) > 1e-4 || Math.abs(f.lon - p.lon) > 1e-4);
+      state.favs.unshift({...p});
+    }
+    renderFavs(); renderTop(); saveSettings();
+  });
+  $('#favs').addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.del != null) { state.favs.splice(+t.dataset.del, 1); renderFavs(); saveSettings(); return; }
+    if (t.dataset.rdel != null) { state.rfavs.splice(+t.dataset.rdel, 1); renderFavs(); saveSettings(); return; }
+    if (t.dataset.fav != null) { const p = state.favs[+t.dataset.fav]; if (p) { state.point = {...p}; fillControls(); load(); } return; }
+    if (t.dataset.rfav != null) { const r = state.rfavs[+t.dataset.rfav]; if (r) { state.dep = {...r.dep}; state.arr = {...r.arr}; fillRouteInputs(); renderMap(true); load(); } }
+  });
+  $('#btnExitDemo').addEventListener('click', stopDemo);
+  $('#btnCmp').addEventListener('click', runCompare);
+  $('#themeBtn').addEventListener('click', () => { state.theme = {auto:'dark', dark:'light', light:'auto'}[state.theme]; applyTheme(); saveSettings(); if (state.mode === 'route') renderMap(false); });
+  let rw = 0, rt = null;
+  if (window.ResizeObserver) new ResizeObserver(ents => {
+    const w = Math.floor(ents[0].contentRect.width);
+    if (w === rw) return; rw = w;
+    clearTimeout(rt); rt = setTimeout(() => { if (state.mode === 'route' && state.route) renderRouteChart(); }, 120);
+  }).observe($('#rtCut'));
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (state.mode === 'route') renderMap(false); });
+}
+
+/* ================= Démarrage ================= */
+loadSettings(); applyTheme(); fillControls(); wire(); renderAll(); loadLeaflet();
+if (/[?&]demo\b/.test(location.search)) startDemo(); else load();
+})();
+</script>
+</body>
+</html>
