@@ -103,12 +103,6 @@ details.setup>summary .sumline{grid-column:1/-1;grid-row:2}
 .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;height:40px}
 .seg button{flex:1;border:0;background:var(--bg);cursor:pointer;font-weight:600}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
-.rfields{display:grid;gap:10px;margin-top:12px}
-.rp{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px 10px;align-items:start}
-.rp-tag{grid-row:1/3;width:28px;height:28px;margin-top:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font:700 14px/1 var(--f-disp)}
-.rp-l{display:grid;gap:8px;grid-template-columns:minmax(0,1fr);min-width:0}
-@media (min-width:720px){.rp-l{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;align-items:end}}
-.swap{justify-self:start;margin-left:38px}
 details.sub{margin-top:12px;border-top:1px solid var(--grid);padding-top:10px}
 details.sub>summary{cursor:pointer;font:600 13px/1.3 var(--f-body);color:var(--muted)}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
@@ -164,14 +158,13 @@ details.sub>summary{cursor:pointer;font:600 13px/1.3 var(--f-body);color:var(--m
 .wact{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 
 /* Carte */
-#map{height:320px;border-radius:9px;border:1px solid var(--line);background:var(--grid);z-index:0}
-@media (min-width:1000px){#map{height:100%;min-height:380px}}
-#rtMapP{display:flex;flex-direction:column}
-#rtMapP .mapbox{flex:1;min-height:0;display:flex;flex-direction:column}
-.maphint{font-size:13px;color:var(--muted);margin-top:8px}
+#map{height:clamp(320px,58vh,640px);border-radius:9px;border:1px solid var(--line);background:var(--grid);z-index:0}
+.maprow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:8px}
+.maphint{font-size:13px;color:var(--muted);margin:0;flex:1 1 220px}
 .maphint.on{color:var(--accent);font-weight:600}
 .pinwrap{background:none;border:0}
-.pin{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 14px/1 var(--f-disp);border:2px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.pin{display:grid;place-items:center;width:34px;height:34px;margin:4px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font:700 17px/1 var(--f-disp);border:2.5px solid var(--panel);box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:grab}
+.leaflet-dragging .pin{cursor:grabbing}
 .wpin{width:18px;height:18px;margin:4px;transform:rotate(45deg);background:var(--crit);border:2px solid var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .leaflet-container{font:12px var(--f-body)}
 .leaflet-tooltip.wtip{font:600 12px var(--f-body);color:var(--crit)}
@@ -301,28 +294,17 @@ td.dim{color:var(--muted)}
 </header>
 
 <main class="wrap gut main">
-  <details class="panel setup" id="setup" open>
-    <summary><span class="ptitle" id="setupTitle">Trajet &amp; mission</span><span class="sumline" id="sumLine"></span></summary>
-
-    <div class="rfields" id="routeFields">
-      <div class="rp">
-        <span class="rp-tag" aria-hidden="true">D</span>
-        <div class="rp-l">
-          <label class="fld" for="fDep"><span>Départ</span><input id="fDep" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="43.380, -0.419"></label>
-          <label class="fld" for="fDepName"><span>Nom</span><input id="fDepName" type="text" autocomplete="off" placeholder="Terrain, DZ…"></label>
-          <button class="btn sm" type="button" data-pick="dep" aria-pressed="false">Placer sur la carte</button>
-        </div>
-      </div>
-      <button class="btn sm swap" id="btnSwap" type="button">Inverser départ et arrivée</button>
-      <div class="rp">
-        <span class="rp-tag" aria-hidden="true">A</span>
-        <div class="rp-l">
-          <label class="fld" for="fArr"><span>Arrivée</span><input id="fArr" class="mono" type="text" autocomplete="off" spellcheck="false" placeholder="42.807, -0.416"></label>
-          <label class="fld" for="fArrName"><span>Nom</span><input id="fArrName" type="text" autocomplete="off" placeholder="Zone, col, terrain…"></label>
-          <button class="btn sm" type="button" data-pick="arr" aria-pressed="false">Placer sur la carte</button>
-        </div>
-      </div>
+  <section class="panel" id="rtMapP">
+    <h2>Trajet &amp; mission <span class="h2sub" id="rtLine"></span></h2>
+    <div id="map" role="application" aria-label="Carte du trajet : fais glisser les repères D et A"></div>
+    <div class="maprow">
+      <p class="maphint" id="mapHint">Fais glisser les repères D et A : le trajet se recalcule tout seul.</p>
+      <button class="btn sm" id="btnSwap" type="button">Inverser D et A</button>
     </div>
+  </section>
+
+  <details class="panel setup" id="setup">
+    <summary><span class="ptitle" id="setupTitle">Réglages</span><span class="sumline" id="sumLine"></span></summary>
 
     <div class="form" id="pointFields" hidden>
       <label class="fld fld-wide" for="fCoord"><span>Coordonnées</span>
@@ -333,7 +315,7 @@ td.dim{color:var(--muted)}
       </label>
       <label class="fld" for="fName"><span>Nom du point</span><input id="fName" type="text" autocomplete="off" placeholder="Zone, DZ, terrain…"></label>
     </div>
-    <small class="hint" id="coordHint">Formats acceptés : 43.380, -0.419 · 43°22'49"N 0°25'07"W · 4322N00025W</small>
+    <small class="hint" id="coordHint" hidden>Formats acceptés : 43.380, -0.419 · 43°22'49"N 0°25'07"W · 4322N00025W</small>
 
     <div class="form">
       <label class="fld" for="fModel"><span>Modèle</span><select id="fModel"></select></label>
@@ -353,11 +335,12 @@ td.dim{color:var(--muted)}
       </div>
     </details>
 
-    <div class="favs" id="favs"></div>
-    <div class="actions">
-      <button class="btn primary" id="btnLoad" type="button">Charger le trajet</button>
-      <button class="btn" id="btnFav" type="button">Enregistrer le trajet</button>
-      <a class="btn" id="lnkWindy" href="https://www.windy.com" target="_blank" rel="noopener">Voir sur Windy</a>
+    <div id="pointActions" hidden>
+      <div class="favs" id="favs"></div>
+      <div class="actions">
+        <button class="btn primary" id="btnLoad" type="button">Charger la prévision</button>
+        <button class="btn" id="btnFav" type="button">Enregistrer le point</button>
+      </div>
     </div>
     <div class="src" id="srcLine"></div>
   </details>
@@ -366,19 +349,12 @@ td.dim{color:var(--muted)}
   <div class="demo" id="demoBanner" hidden><span>Exemple : données simulées, ce n'est pas une prévision.</span><button class="btn" id="btnExitDemo" type="button">Charger la vraie prévision</button></div>
 
   <!-- ===== Mode trajet ===== -->
-  <div class="grid2" id="rtTop" hidden>
-    <section class="panel" id="rtSumP">
-      <h2>Bilan du trajet <span class="h2sub" id="rtSumH"></span></h2>
-      <div class="rthead" id="rtHead"></div>
-      <div id="rtWorst"></div>
-      <div class="synth" id="rtFacts"></div>
-    </section>
-    <section class="panel" id="rtMapP">
-      <h2>Carte <span class="h2sub">points colorés selon base et visibilité</span></h2>
-      <div class="mapbox"><div id="map" role="application" aria-label="Carte du trajet"></div></div>
-      <div class="maphint" id="mapHint">Déplace les repères D et A, ou utilise « Placer sur la carte ».</div>
-    </section>
-  </div>
+  <section class="panel" id="rtSumP" hidden>
+    <h2>Bilan du trajet <span class="h2sub" id="rtSumH"></span></h2>
+    <div class="rthead" id="rtHead"></div>
+    <div id="rtWorst"></div>
+    <div class="synth" id="rtFacts"></div>
+  </section>
 
   <section class="panel" id="rtCutP" hidden>
     <h2>Coupe le long du trajet <span class="h2sub" id="rtCutH"></span></h2>
@@ -483,8 +459,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const state = {
   mode:'route', point:{...DEFAULT_POINT}, dep:{...DEFAULT_POINT}, arr:{...DEFAULT_ARR},
   modelKey:'arome', ceilFt:10000, tz:'utc', dur:6, th:{...TH_DEF},
-  startU:null, selU:null, favs:[], rfavs:[], theme:'auto',
-  data:null, route:null, demo:false, cmp:null, selK:null, pick:null, dirty:false, busy:false
+  startU:null, selU:null, favs:[], theme:'auto',
+  data:null, route:null, demo:false, cmp:null, selK:null, dirty:false, busy:false, again:false
 };
 const cache = new Map();
 
@@ -502,15 +478,14 @@ function loadSettings(){
     if (o.tz === 'utc' || o.tz === 'loc') state.tz = o.tz;
     if (DURS.includes(o.dur)) state.dur = o.dur;
     if (Array.isArray(o.favs)) state.favs = o.favs.filter(okLoc).slice(0, 30);
-    if (Array.isArray(o.rfavs)) state.rfavs = o.rfavs.filter(r => r && okLoc(r.dep) && okLoc(r.arr)).slice(0, 30);
     if (['auto','light','dark'].includes(o.theme)) state.theme = o.theme;
     if (o.th) for (const k of Object.keys(TH_DEF)) if (isFinite(o.th[k]) && o.th[k] >= 0) state.th[k] = +o.th[k];
   } catch (e) { /* stockage indisponible */ }
 }
 function saveSettings(){
   try {
-    const {mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, rfavs, theme, th} = state;
-    localStorage.setItem(STORE, JSON.stringify({mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, rfavs, theme, th}));
+    const {mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th} = state;
+    localStorage.setItem(STORE, JSON.stringify({mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th}));
   } catch (e) { /* ignoré */ }
 }
 
@@ -1027,11 +1002,14 @@ const selKEff = (R, ev) => state.selK != null ? state.selK : ev.worst ? nearestK
 function renderRouteSummary(){
   const R = state.route, ev = evalRoute(R, state.selU);
   $('#rtSumH').textContent = hLong(state.selU);
-  $('#rtHead').innerHTML = `<b>${esc(shortName(R.dep))}</b> → <b>${esc(shortName(R.arr))}</b> · ${fmtNm(R.Lkm)} NM (${nf.format(Math.round(R.Lkm))} km) · Rv ${fmtDir(R.brg)}°`;
+  $('#rtHead').innerHTML = `<b>D</b> ${esc(shortName(R.dep))} → <b>A</b> ${esc(shortName(R.arr))} · <b>${fmtNm(R.Lkm)} NM</b> (${nf.format(Math.round(R.Lkm))} km) · Rv ${fmtDir(R.brg)}°`;
   const W = ev.worst;
   let card;
   if (!ev.anyOk) card = `<div class="worst"><div class="wl">Point le plus défavorable</div><div class="wv">Pas de données</div><div class="wd">${esc(R.model.short)} ne couvre pas cette heure. Choisis une autre heure ou un autre modèle.</div></div>`;
-  else if (!W) card = `<div class="worst o"><div class="wl"><span class="pill o">RAS</span>Point le plus défavorable</div><div class="wv">Aucun point limitant</div><div class="wd">Pas de base de nuages ni de visibilité réduite détectées sur le trajet.</div></div>`;
+  else if (!W || W.sev === 'o') {
+    const least = W ? `Point le moins favorable à ${fmtNm(W.dkm)} NM du départ : ${W.bAgl == null ? 'pas de nuage bas' : 'base ' + nf.format(r100(W.bAgl)) + ' ft sol'} · visi ${fmtVis(W.vis)} km.` : 'Pas de base de nuages ni de visibilité réduite détectées sur le trajet.';
+    card = `<div class="worst o"><div class="wl"><span class="pill o">RAS</span>Point le plus défavorable</div><div class="wv">Rien sous tes seuils</div><div class="wd">${least}</div></div>`;
+  }
   else {
     const masked = W.bAgl != null && W.bAgl <= 0;
     const baseTxt = W.bAgl == null ? 'pas de nuage bas' : masked ? 'relief dans les nuages' : `base ${nf.format(r100(W.bAgl))} ft sol`;
@@ -1039,7 +1017,7 @@ function renderRouteSummary(){
     const lim = W.lim === 'base' ? (masked ? 'relief masqué' : 'base des nuages') : 'visibilité';
     const pill = W.sev === 'c' ? '<span class="pill c">Critique</span>' : W.sev === 'w' ? '<span class="pill w">Marginal</span>' : '<span class="pill o">Correct</span>';
     card = `<div class="worst ${W.sev}"><div class="wl">${pill}Point le plus défavorable · limitant : ${lim}</div>` +
-      `<div class="wv">${fmtNm(W.dkm)} NM de ${esc(shortName(R.dep))}</div>` +
+      `<div class="wv">${fmtNm(W.dkm)} NM du départ</div>` +
       `<div class="wd">${baseTxt} · ${visTxt} · relief ${nf.format(r100(W.z * FT))} ft</div>` +
       `<div class="wc">${fmtDM(W)}</div>` +
       `<div class="wact"><button class="btn sm" type="button" data-act="selworst">Voir dans la coupe</button><button class="btn sm" type="button" data-act="ptworst">Profil vertical ici</button></div></div>`;
@@ -1283,16 +1261,10 @@ function ensureMap(){
   L.control.layers({'Relief (OpenTopoMap)':topo, 'OpenStreetMap':osm}, null, {position:'topright'}).addTo(m);
   const grp = L.layerGroup().addTo(m);
   m.setView([state.dep.lat, state.dep.lon], 9);
-  m.on('click', e => {
-    if (!state.pick) return;
-    const which = state.pick;
-    state[which] = {lat:+e.latlng.lat.toFixed(5), lon:+e.latlng.lng.toFixed(5), name:''};
-    setPick(null); routeEdited(); fillRouteInputs(); renderMap(false);
-  });
   MAP = {m, grp, fitted:''};
   return MAP;
 }
-function pinIcon(txt){ return L.divIcon({className:'pinwrap', html:`<span class="pin">${txt}</span>`, iconSize:[26, 26], iconAnchor:[13, 13]}); }
+function pinIcon(txt){ return L.divIcon({className:'pinwrap', html:`<span class="pin">${txt}</span>`, iconSize:[42, 42], iconAnchor:[21, 21]}); }
 function renderMap(fit){
   const M = ensureMap(); if (!M) return;
   M.grp.clearLayers();
@@ -1318,36 +1290,35 @@ function renderMap(fit){
   }
   for (const which of ['dep', 'arr']) {
     const p = state[which];
-    const mk = L.marker([p.lat, p.lon], {icon:pinIcon(which === 'dep' ? 'D' : 'A'), draggable:true, zIndexOffset:800, title:which === 'dep' ? 'Départ' : 'Arrivée'});
-    mk.on('dragend', e => { const ll = e.target.getLatLng(); state[which] = {lat:+ll.lat.toFixed(5), lon:+ll.lng.toFixed(5), name:''}; routeEdited(); fillRouteInputs(); renderMap(false); });
+    const mk = L.marker([p.lat, p.lon], {icon:pinIcon(which === 'dep' ? 'D' : 'A'), draggable:true, autoPan:true, zIndexOffset:800, title:which === 'dep' ? 'Départ' : 'Arrivée'});
+    mk.on('dragstart', () => { clearTimeout(dragTimer); });
+    mk.on('dragend', e => { const ll = e.target.getLatLng(); state[which] = {lat:+ll.lat.toFixed(5), lon:+ll.lng.toFixed(5), name:''}; routeEdited(); });
     mk.addTo(M.grp);
   }
   const key = `${fmtCoord(state.dep)}|${fmtCoord(state.arr)}`;
-  if (fit || M.fitted !== key) {
-    M.m.fitBounds(L.latLngBounds([[state.dep.lat, state.dep.lon], [state.arr.lat, state.arr.lon]]), {padding:[30, 30], maxZoom:12});
-    M.fitted = key;
-  }
+  const bb = L.latLngBounds([[state.dep.lat, state.dep.lon], [state.arr.lat, state.arr.lon]]);
+  if (!M.fitted || (fit && !M.m.getBounds().pad(-0.05).contains(bb))) M.m.fitBounds(bb, {padding:[40, 40], maxZoom:12});
+  M.fitted = key;
 }
 function loadLeaflet(){
   const sc = document.createElement('script');
   sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
   sc.onload = () => { leafletState = 'ready'; if (state.mode === 'route') { ensureMap(); setTimeout(() => { if (MAP) { MAP.m.invalidateSize(); renderMap(true); } }, 0); } };
-  sc.onerror = () => { leafletState = 'failed'; $('#mapHint').textContent = 'Carte indisponible (pas de connexion au fond de carte). Saisis les coordonnées à la main.'; $('#map').hidden = true; };
+  sc.onerror = () => { leafletState = 'failed'; $('#mapHint').textContent = 'Carte indisponible : vérifie la connexion puis recharge la page. Le dernier trajet reste calculé.'; $('#map').hidden = true; };
   document.head.appendChild(sc);
 }
-function setPick(which){
-  state.pick = which;
-  document.querySelectorAll('[data-pick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pick === which)));
-  const h = $('#mapHint');
-  if (which) { h.textContent = `Touche la carte pour placer ${which === 'dep' ? 'le départ (D)' : "l'arrivée (A)"}.`; h.classList.add('on'); }
-  else { h.textContent = leafletState === 'failed' ? h.textContent : 'Déplace les repères D et A, ou utilise « Placer sur la carte ».'; h.classList.remove('on'); }
-}
+/* Recalcul automatique après déplacement d'un repère */
+let dragTimer = null;
+const HINT_IDLE = 'Fais glisser les repères D et A : le trajet se recalcule tout seul.';
+function setHint(txt, on){ const h = $('#mapHint'); if (leafletState === 'failed') return; h.textContent = txt || HINT_IDLE; h.classList.toggle('on', !!on); }
 function routeEdited(){
   const R = state.route;
   state.dirty = !R || fmtCoord(R.dep) !== fmtCoord(state.dep) || fmtCoord(R.arr) !== fmtCoord(state.arr);
-  if (state.dirty) setStatus('info', `<p><strong>Trajet modifié.</strong> Appuie sur « Charger le trajet » pour calculer la nouvelle coupe.</p><button class="btn primary" type="button" data-act="load">Charger le trajet</button>`);
-  else setStatus(null);
-  renderTop(); saveSettings();
+  renderTop(); saveSettings(); renderMap(false);
+  clearTimeout(dragTimer);
+  if (!state.dirty) { setHint(); return; }
+  setHint('Nouveau trajet : calcul dans un instant…', true);
+  dragTimer = setTimeout(() => loadRoute(), 900);
 }
 
 /* ================= Mode point : coupe verticale ================= */
@@ -1643,22 +1614,19 @@ function renderTop(){
   const m = modelOf(state.modelKey), route = state.mode === 'route';
   $('#tabRoute').setAttribute('aria-selected', String(route));
   $('#tabPoint').setAttribute('aria-selected', String(!route));
-  $('#routeFields').hidden = !route; $('#pointFields').hidden = route;
-  $('#setupTitle').textContent = route ? 'Trajet & mission' : 'Point & mission';
-  $('#btnLoad').textContent = route ? 'Charger le trajet' : 'Charger la prévision';
-  $('#btnFav').textContent = route ? 'Enregistrer le trajet' : 'Enregistrer le point';
-  $('#btnLoad').classList.toggle('primary', true);
+  $('#rtMapP').hidden = !route;
+  $('#pointFields').hidden = route; $('#coordHint').hidden = route; $('#pointActions').hidden = route;
+  $('#setupTitle').textContent = route ? 'Réglages' : 'Point & mission';
+  const startTxt = state.startU ? ` · début ${fmtDay(state.startU, state.tz === 'utc')} ${hMain(state.startU)}` : '';
   if (route) {
-    const L = gcDist(state.dep, state.arr);
-    $('#barPt').textContent = `${shortName(state.dep)} → ${shortName(state.arr)} · ${m.short}`;
-    $('#sumLine').textContent = `${shortName(state.dep)} → ${shortName(state.arr)} · ${fmtNm(L)} NM · ${m.short} · ${state.dur} h`;
-    const mid = gcInterp(state.dep, state.arr, 0.5);
-    $('#lnkWindy').href = `https://www.windy.com/?${mid.lat.toFixed(3)},${mid.lon.toFixed(3)},${L > 150 ? 7 : L > 60 ? 8 : 9}`;
+    const L = gcDist(state.dep, state.arr), brg = bearing(state.dep, state.arr);
+    $('#barPt').textContent = `${fmtNm(L)} NM · Rv ${fmtDir(brg)}° · ${m.short}`;
+    $('#rtLine').textContent = `${fmtNm(L)} NM · Rv ${fmtDir(brg)}°`;
+    $('#sumLine').textContent = `${m.short}${startTxt} · ${state.dur} h · ${state.tz === 'utc' ? 'UTC' : 'heure locale'}`;
   } else {
     const p = state.point;
     $('#barPt').textContent = `${p.name || fmtCoord(p)} · ${m.short}`;
     $('#sumLine').textContent = `${p.name ? p.name + ' · ' : ''}${fmtDM(p)} · ${m.short} · ${state.dur} h`;
-    $('#lnkWindy').href = `https://www.windy.com/${p.lat.toFixed(3)}/${p.lon.toFixed(3)}?${p.lat.toFixed(3)},${p.lon.toFixed(3)},10`;
   }
   $('#thSum').textContent = `${nf.format(state.th.baseCrit)}/${nf.format(state.th.baseMarg)} ft · visi ${nf.format(state.th.visCrit)}/${nf.format(state.th.visMarg)} m`;
   const when = t => new Date(t).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
@@ -1672,12 +1640,7 @@ function renderTop(){
     $('#srcLine').textContent = `${D.model.label} (${D.model.res}) · point de grille ${D.lat.toFixed(3)}, ${D.lon.toFixed(3)} · altitude ${fmtFt(D.E)} ft · ${D.levels.length} niveaux${D.reduced ? ' (jeu réduit)' : ''} · base et visi : ${D.ax ? D.ax.src : 'indisponibles'} · ${D.demo ? 'données simulées' : 'reçu à ' + when(D.fetchedAt)}`;
   } else $('#srcLine').textContent = '';
 }
-function fillRouteInputs(){
-  $('#fDep').value = fmtCoord(state.dep); $('#fDepName').value = state.dep.name || '';
-  $('#fArr').value = fmtCoord(state.arr); $('#fArrName').value = state.arr.name || '';
-}
 function fillControls(){
-  fillRouteInputs();
   $('#fCoord').value = fmtCoord(state.point);
   $('#fName').value = state.point.name || '';
   $('#fModel').innerHTML = MODELS.map(m => `<option value="${m.key}" ${m.key === state.modelKey ? 'selected' : ''}>${m.label} · ${m.res}</option>`).join('');
@@ -1694,11 +1657,7 @@ function fillStart(){
   sel.innerHTML = vt.map(u => `<option value="${u}" ${u === state.startU ? 'selected' : ''}>${esc(fmtDay(u, state.tz === 'utc'))} · ${hMain(u)}</option>`).join('');
 }
 function renderFavs(){
-  if (state.mode === 'route') {
-    $('#favs').innerHTML = state.rfavs.map((r, k) => `<span class="fav"><button type="button" data-rfav="${k}">${esc(shortName(r.dep))} → ${esc(shortName(r.arr))}</button><button type="button" class="x" data-rdel="${k}" aria-label="Retirer ce trajet">×</button></span>`).join('');
-  } else {
-    $('#favs').innerHTML = state.favs.map((f, k) => `<span class="fav"><button type="button" data-fav="${k}">${esc(f.name || fmtCoord(f))}</button><button type="button" class="x" data-del="${k}" aria-label="Retirer ${esc(f.name || 'ce point')}">×</button></span>`).join('');
-  }
+  $('#favs').innerHTML = state.favs.map((f, k) => `<span class="fav"><button type="button" data-fav="${k}">${esc(f.name || fmtCoord(f))}</button><button type="button" class="x" data-del="${k}" aria-label="Retirer ${esc(f.name || 'ce point')}">×</button></span>`).join('');
 }
 function renderLegend(){
   const sw = inner => `<svg viewBox="0 0 22 12" aria-hidden="true">${inner}</svg>`;
@@ -1717,7 +1676,6 @@ function renderAll(fitMap){
   const route = state.mode === 'route';
   const R = state.route, D = state.data;
   const hasR = route && !!R, hasP = !route && !!D;
-  $('#rtTop').hidden = !route;
   $('#rtSumP').hidden = !hasR;
   $('#rtCutP').hidden = !hasR; $('#rtFriseP').hidden = !hasR; $('#rtTblP').hidden = !hasR;
   $('#synthP').hidden = !hasP; $('#views').hidden = !hasP; $('#cmpP').hidden = !hasP;
@@ -1773,14 +1731,16 @@ async function loadPoint(){
   saveSettings();
 }
 async function loadRoute(){
+  if (state.busy) { state.again = true; return; }
   const m = modelOf(state.modelKey), dep = {...state.dep}, arr = {...state.arr};
   const Lkm = gcDist(dep, arr);
-  if (Lkm < 0.5) { setStatus('err', '<p><strong>Départ et arrivée sont confondus.</strong> Choisis deux points distincts.</p>'); return; }
+  if (Lkm < 0.5) { setHint(); setStatus('err', '<p><strong>D et A sont confondus.</strong> Écarte les deux repères sur la carte.</p>'); return; }
   const n = clamp(Math.round(Lkm / m.minSp) + 1, 3, 31);
   const wl = Array.from({length:n}, (_, k) => ({...gcInterp(dep, arr, k / (n - 1)), dkm:Lkm * k / (n - 1)}));
   const nd = clamp(Math.round(Lkm / 0.3) + 1, 30, 200);
   const dl = Array.from({length:nd}, (_, j) => ({...gcInterp(dep, arr, j / (nd - 1)), dkm:Lkm * j / (nd - 1)}));
-  busy(true, `Chargement ${m.label} sur ${n} points du trajet (${fmtNm(Lkm)} NM)…`);
+  busy(true, `Calcul ${m.label} sur ${n} points du trajet (${fmtNm(Lkm)} NM)…`);
+  setHint('Calcul du trajet en cours…', true);
   try {
     const [Ds, ax, el] = await Promise.all([getMain(m, wl, 'route'), getAux(wl, m.days), getElev(dl)]);
     Ds.forEach((D, k) => attachAux(D, ax && ax.src, ax && ax.list[k]));
@@ -1788,11 +1748,13 @@ async function loadRoute(){
     const dense = el ? dl.map((l, j) => ({...l, z:el[j]})) : wl.map((l, k) => ({...l, z:Ds[k].E}));
     state.route = {dep, arr, Lkm, brg:bearing(dep, arr), w:wl.map((l, k) => ({...l, D:Ds[k]})), dense, maxZ:Math.max(...dense.map(d => d.z)),
       model:m, times:Ds[0].times, valid:Ds[0].valid, ev:new Map(), auxSrc:ax ? ax.src : null, demElev:!!el, fetchedAt:Date.now(), demo:state.demo};
-    state.selK = null; state.dirty = false;
-    clampWindow(); setStatus(null); renderAll(true); collapseOnPhone();
-  } catch (e) { showLoadError(e); }
+    state.selK = null;
+    state.dirty = fmtCoord(dep) !== fmtCoord(state.dep) || fmtCoord(arr) !== fmtCoord(state.arr);
+    clampWindow(); setStatus(null); setHint(); renderAll(true);
+  } catch (e) { setHint(); showLoadError(e); }
   finally { busy(false); }
   saveSettings();
+  if (state.again) { state.again = false; if (state.dirty) loadRoute(); }
 }
 function startDemo(){
   state.demo = true; state.startU = null; state.selU = null;
@@ -1897,11 +1859,7 @@ function readLoc(coordSel, nameSel, prev){
 }
 function hintErr(msg){ const h = $('#coordHint'); if (msg) { h.textContent = msg; h.classList.add('err'); } else { h.textContent = COORD_HINT; h.classList.remove('err'); } }
 function applyForm(){
-  if (state.mode === 'route') {
-    const d = readLoc('#fDep', '#fDepName', state.dep), a = readLoc('#fArr', '#fArrName', state.arr);
-    if (!d || !a) { hintErr(`Coordonnées ${!d ? 'de départ' : "d'arrivée"} non reconnues. ${COORD_HINT}`); return false; }
-    hintErr(null); state.dep = d; state.arr = a; fillRouteInputs(); return true;
-  }
+  if (state.mode === 'route') return true;
   const p = readLoc('#fCoord', '#fName', state.point);
   if (!p) { hintErr(`Coordonnées non reconnues. ${COORD_HINT}`); return false; }
   hintErr(null); state.point = p; $('#fCoord').value = fmtCoord(p); return true;
@@ -1913,7 +1871,8 @@ function applyTheme(){
 }
 function setMode(mode){
   if (state.mode === mode) return;
-  state.mode = mode; state.cmp = null; setPick(null); setStatus(null);
+  state.mode = mode; state.cmp = null; setStatus(null);
+  $('#setup').open = mode === 'point' && !state.data;
   saveSettings(); renderAll(true);
   if (mode === 'route' && !MAP && leafletState === 'ready') { ensureMap(); setTimeout(() => { if (MAP) { MAP.m.invalidateSize(); renderMap(true); } }, 0); }
   const has = mode === 'route' ? state.route : state.data;
@@ -1922,7 +1881,8 @@ function setMode(mode){
 }
 function pointFromRoute(p){
   const R = state.route;
-  state.point = {lat:+p.lat.toFixed(5), lon:+p.lon.toFixed(5), name:`${shortName(R.dep)} +${fmtNm(p.dkm)} NM`};
+  state.point = {lat:+p.lat.toFixed(5), lon:+p.lon.toFixed(5), name:`Trajet ${fmtNm(p.dkm)} NM du départ`};
+  if (!R) return;
   state.data = null;
   setMode('point');
   window.scrollTo({top:0, behavior:'smooth'});
@@ -1975,14 +1935,8 @@ function wire(){
   };
   ['#thBaseC', '#thBaseM', '#thVisC', '#thVisM'].forEach(id => $(id).addEventListener('change', thChange));
   $('#btnLoad').addEventListener('click', () => { if (applyForm()) { renderTop(); load(); } });
-  ['#fCoord', '#fName', '#fDep', '#fDepName', '#fArr', '#fArrName'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnLoad').click(); } }));
-  ['#fDep', '#fArr'].forEach(id => $(id).addEventListener('change', () => { if (applyForm()) { routeEdited(); renderMap(false); } }));
-  $('#btnSwap').addEventListener('click', () => { applyForm(); [state.dep, state.arr] = [state.arr, state.dep]; fillRouteInputs(); routeEdited(); renderMap(false); });
-  document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
-    if (!MAP) { hintErr(leafletState === 'failed' ? 'Carte indisponible : saisis les coordonnées.' : 'La carte se charge, réessaie dans un instant.'); return; }
-    setPick(state.pick === b.dataset.pick ? null : b.dataset.pick);
-    if (state.pick) $('#rtMapP').scrollIntoView({behavior:'smooth', block:'center'});
-  }));
+  ['#fCoord', '#fName'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnLoad').click(); } }));
+  $('#btnSwap').addEventListener('click', () => { [state.dep, state.arr] = [state.arr, state.dep]; routeEdited(); });
   $('#btnGeo').addEventListener('click', () => {
     if (!navigator.geolocation) { hintErr('Géolocalisation indisponible sur cet appareil.'); return; }
     hintErr(null); $('#coordHint').textContent = 'Recherche de la position…';
@@ -1995,23 +1949,16 @@ function wire(){
   });
   $('#btnFav').addEventListener('click', () => {
     if (!applyForm()) return;
-    if (state.mode === 'route') {
-      const key = r => `${fmtCoord(r.dep)}|${fmtCoord(r.arr)}`, cur = {dep:{...state.dep}, arr:{...state.arr}};
-      state.rfavs = state.rfavs.filter(r => key(r) !== key(cur)); state.rfavs.unshift(cur);
-    } else {
-      const p = state.point;
-      if (!p.name) { p.name = `Point ${fmtDM(p)}`; $('#fName').value = p.name; }
-      state.favs = state.favs.filter(f => Math.abs(f.lat - p.lat) > 1e-4 || Math.abs(f.lon - p.lon) > 1e-4);
-      state.favs.unshift({...p});
-    }
+    const p = state.point;
+    if (!p.name) { p.name = `Point ${fmtDM(p)}`; $('#fName').value = p.name; }
+    state.favs = state.favs.filter(f => Math.abs(f.lat - p.lat) > 1e-4 || Math.abs(f.lon - p.lon) > 1e-4);
+    state.favs.unshift({...p});
     renderFavs(); renderTop(); saveSettings();
   });
   $('#favs').addEventListener('click', e => {
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.del != null) { state.favs.splice(+t.dataset.del, 1); renderFavs(); saveSettings(); return; }
-    if (t.dataset.rdel != null) { state.rfavs.splice(+t.dataset.rdel, 1); renderFavs(); saveSettings(); return; }
-    if (t.dataset.fav != null) { const p = state.favs[+t.dataset.fav]; if (p) { state.point = {...p}; fillControls(); load(); } return; }
-    if (t.dataset.rfav != null) { const r = state.rfavs[+t.dataset.rfav]; if (r) { state.dep = {...r.dep}; state.arr = {...r.arr}; fillRouteInputs(); renderMap(true); load(); } }
+    if (t.dataset.fav != null) { const p = state.favs[+t.dataset.fav]; if (p) { state.point = {...p}; fillControls(); load(); } }
   });
   $('#btnExitDemo').addEventListener('click', stopDemo);
   $('#btnCmp').addEventListener('click', runCompare);
@@ -2026,7 +1973,9 @@ function wire(){
 }
 
 /* ================= Démarrage ================= */
-loadSettings(); applyTheme(); fillControls(); wire(); renderAll(); loadLeaflet();
+loadSettings(); applyTheme(); fillControls(); wire();
+$('#setup').open = state.mode === 'point';
+renderAll(); loadLeaflet();
 if (/[?&]demo\b/.test(location.search)) startDemo(); else load();
 })();
 </script>
