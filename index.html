@@ -20,6 +20,7 @@
   --bg:#EEF1F1; --bar:rgba(238,241,241,.93); --panel:#FFFFFF; --ink:#15212A; --muted:#5A6A73;
   --line:#D3DADD; --grid:#E4E9EB; --accent:#0B7781; --accent-ink:#FFFFFF;
   --temp:#D2452F; --dew:#2B8853; --iso0:#2462C2; --ice:#7A4AD4; --cloud:#5F707A; --terrain:#B08D5E; --route:#0B7781;
+  --rain1:#8EC9F5; --rain2:#3D8FE0; --rain3:#1F4FBF; --rain4:#7A2FC4;
   --ok:#2B8853; --warn:#BE7F06; --crit:#C7362A;
   --f-disp:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
   --f-body:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -160,6 +161,16 @@ details.sub>summary{cursor:pointer;font:600 13px/1.3 var(--f-body);color:var(--m
 /* Carte */
 #map{height:clamp(320px,58vh,640px);border-radius:9px;border:1px solid var(--line);background:var(--grid);z-index:0}
 .maprow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-top:8px}
+.maptools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.seg.sm{height:34px;flex:1 1 260px;max-width:420px}
+.seg.sm button{font-size:13.5px;padding:0 6px}
+.btn.play svg{width:14px;height:14px;fill:currentColor;stroke:none}
+.maplegend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:8px;font-size:12.5px;color:var(--muted);min-height:20px}
+.maplegend .lg{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.maplegend .sw{width:16px;height:11px;border-radius:2px;display:inline-block;border:1px solid var(--line)}
+.maplegend b{color:var(--ink);font-weight:600}
+.leaflet-popup-content{font:13px/1.4 var(--f-body);margin:10px 12px}
+.leaflet-popup-content b{font-weight:600}
 .maphint{font-size:13px;color:var(--muted);margin:0;flex:1 1 220px}
 .maphint.on{color:var(--accent);font-weight:600}
 .pinwrap{background:none;border:0}
@@ -296,7 +307,17 @@ td.dim{color:var(--muted)}
 <main class="wrap gut main">
   <section class="panel" id="rtMapP">
     <h2>Trajet &amp; mission <span class="h2sub" id="rtLine"></span></h2>
+    <div class="maptools">
+      <div class="seg sm" role="group" aria-label="Couche affichée sur la carte" id="layerSeg">
+        <button type="button" data-layer="base" aria-pressed="true">Base sol</button>
+        <button type="button" data-layer="vis" aria-pressed="false">Visi</button>
+        <button type="button" data-layer="rain" aria-pressed="false">Pluie</button>
+        <button type="button" data-layer="none" aria-pressed="false">Aucune</button>
+      </div>
+      <button class="btn sm play" id="btnPlay" type="button" aria-pressed="false"></button>
+    </div>
     <div id="map" role="application" aria-label="Carte du trajet : fais glisser les repères D et A"></div>
+    <div class="maplegend" id="mapLegend"></div>
     <div class="maprow">
       <p class="maphint" id="mapHint">Fais glisser les repères D et A : le trajet se recalcule tout seul.</p>
       <button class="btn sm" id="btnSwap" type="button">Inverser D et A</button>
@@ -405,6 +426,7 @@ td.dim{color:var(--muted)}
   <footer class="foot">
     <p><strong>Aide à la décision.</strong> Sorties brutes de modèles numériques, sans expertise de prévisionniste. Ne remplace pas les produits officiels (TEMSI, TAF, prévision du centre météo) ni l'observation.</p>
     <p>Base des nuages : deux estimations, la plus basse est retenue. La première vient du modèle choisi (humidité par niveau, nébulosité ≥ 3/8), la seconde est la base calculée par DMI Harmonie AROME (2 km). Visibilité : DMI Harmonie, puis ECMWF IFS 9 km au-delà de son échéance (AROME ne la fournit pas). Relief : Copernicus GLO-90, 90 m. Entre deux points météo, la base est interpolée en altitude puis comparée au relief réel, ce qui fait ressortir les crêtes dans les nuages.</p>
+    <p>Couche carte : bande de ±12 km autour du trajet, en cases d'environ 3 km. Base et visibilité DMI Harmonie (2 km, environ 2,5 jours d'échéance), pluie du modèle choisi. La hauteur sol d'une case se réfère à l'altitude de son centre : en montagne, une crête de la case peut être plus haute.</p>
     <p>Givrage : air saturé (HR ≥ 90 %) entre 0 et −20 °C, fort entre 0 et −10 °C quand HR ≥ 96 %. Vent par tranches interpolé dans le profil du modèle. Les modèles lissent le relief : en montagne, les basses couches réelles diffèrent.</p>
     <p>Données <a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo.com</a> (CC BY 4.0) à partir de Météo-France, DMI, DWD et ECMWF. Fond de carte OpenTopoMap / OpenStreetMap. Usage non commercial.</p>
   </footer>
@@ -458,7 +480,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 /* ================= État ================= */
 const state = {
   mode:'route', point:{...DEFAULT_POINT}, dep:{...DEFAULT_POINT}, arr:{...DEFAULT_ARR},
-  modelKey:'arome', ceilFt:10000, tz:'utc', dur:6, th:{...TH_DEF},
+  modelKey:'arome', ceilFt:10000, tz:'utc', dur:6, th:{...TH_DEF}, layer:'base', grid:null,
   startU:null, selU:null, favs:[], theme:'auto',
   data:null, route:null, demo:false, cmp:null, selK:null, dirty:false, busy:false, again:false
 };
@@ -479,13 +501,14 @@ function loadSettings(){
     if (DURS.includes(o.dur)) state.dur = o.dur;
     if (Array.isArray(o.favs)) state.favs = o.favs.filter(okLoc).slice(0, 30);
     if (['auto','light','dark'].includes(o.theme)) state.theme = o.theme;
+    if (['base','vis','rain','none'].includes(o.layer)) state.layer = o.layer;
     if (o.th) for (const k of Object.keys(TH_DEF)) if (isFinite(o.th[k]) && o.th[k] >= 0) state.th[k] = +o.th[k];
   } catch (e) { /* stockage indisponible */ }
 }
 function saveSettings(){
   try {
-    const {mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th} = state;
-    localStorage.setItem(STORE, JSON.stringify({mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th}));
+    const {mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th, layer} = state;
+    localStorage.setItem(STORE, JSON.stringify({mode, point, dep, arr, modelKey, ceilFt, tz, dur, favs, theme, th, layer}));
   } catch (e) { /* ignoré */ }
 }
 
@@ -721,7 +744,7 @@ async function getAux(locs, days){
     const arr = Array.isArray(r.j) ? r.j : [r.j];
     if (arr.length !== locs.length || !arr.every(o => o && o.hourly)) continue;
     const pick = (h, k) => { const v = h[k] ?? h[`${k}_${att.id}`]; return Array.isArray(v) ? v : null; };
-    const list = arr.map(o => { const h = o.hourly; return {times:h.time || [], cb:pick(h, 'cloud_base'), vis:pick(h, 'visibility'), cc2:pick(h, 'cloud_cover_2m'), ccl:pick(h, 'cloud_cover_low')}; });
+    const list = arr.map(o => { const h = o.hourly; return {times:h.time || [], elev:Number.isFinite(o.elevation) ? o.elevation : null, cb:pick(h, 'cloud_base'), vis:pick(h, 'visibility'), cc2:pick(h, 'cloud_cover_2m'), ccl:pick(h, 'cloud_cover_low')}; });
     if (!list.some(a => (a.vis || []).some(v => v != null) || (a.cb || []).some(v => v != null))) continue;
     const v = {src:att.src, label:att.id, list};
     cache.set(key, {t:Date.now(), v});
@@ -1259,9 +1282,12 @@ function ensureMap(){
     attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'});
   topo.addTo(m);
   L.control.layers({'Relief (OpenTopoMap)':topo, 'OpenStreetMap':osm}, null, {position:'topright'}).addTo(m);
+  m.createPane('gridPane'); m.getPane('gridPane').style.zIndex = 350;
+  const cr = L.canvas({pane:'gridPane', padding:0.4});
+  const gridG = L.layerGroup().addTo(m);
   const grp = L.layerGroup().addTo(m);
   m.setView([state.dep.lat, state.dep.lon], 9);
-  MAP = {m, grp, fitted:''};
+  MAP = {m, grp, gridG, cr, gridKey:null, fitted:''};
   return MAP;
 }
 function pinIcon(txt){ return L.divIcon({className:'pinwrap', html:`<span class="pin">${txt}</span>`, iconSize:[42, 42], iconAnchor:[21, 21]}); }
@@ -1291,7 +1317,7 @@ function renderMap(fit){
   for (const which of ['dep', 'arr']) {
     const p = state[which];
     const mk = L.marker([p.lat, p.lon], {icon:pinIcon(which === 'dep' ? 'D' : 'A'), draggable:true, autoPan:true, zIndexOffset:800, title:which === 'dep' ? 'Départ' : 'Arrivée'});
-    mk.on('dragstart', () => { clearTimeout(dragTimer); });
+    mk.on('dragstart', () => { clearTimeout(dragTimer); setPlay(false); });
     mk.on('dragend', e => { const ll = e.target.getLatLng(); state[which] = {lat:+ll.lat.toFixed(5), lon:+ll.lng.toFixed(5), name:''}; routeEdited(); });
     mk.addTo(M.grp);
   }
@@ -1299,6 +1325,7 @@ function renderMap(fit){
   const bb = L.latLngBounds([[state.dep.lat, state.dep.lon], [state.arr.lat, state.arr.lon]]);
   if (!M.fitted || (fit && !M.m.getBounds().pad(-0.05).contains(bb))) M.m.fitBounds(bb, {padding:[40, 40], maxZoom:12});
   M.fitted = key;
+  drawGrid();
 }
 function loadLeaflet(){
   const sc = document.createElement('script');
@@ -1319,6 +1346,215 @@ function routeEdited(){
   if (!state.dirty) { setHint(); return; }
   setHint('Nouveau trajet : calcul dans un instant…', true);
   dragTimer = setTimeout(() => loadRoute(), 900);
+}
+
+/* ================= Couche carte : bande autour du trajet ================= */
+const CORR = {half:12, step:3, max:300};
+const LAYER_TXT = {base:'base des nuages', vis:'visibilité', rain:'pluie'};
+function destPoint(p, brgDeg, dKm){
+  const d = dKm / RE, th = rad(brgDeg), p1 = rad(p.lat), l1 = rad(p.lon);
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(th));
+  const l2 = l1 + Math.atan2(Math.sin(th) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return {lat:deg(p2), lon:((deg(l2) + 540) % 360) - 180};
+}
+const routeKey = R => `${fmtCoord(R.dep)}|${fmtCoord(R.arr)}`;
+function buildCorridor(dep, arr){
+  const L = gcDist(dep, arr), ext = CORR.step;
+  const nC = Math.round(2 * CORR.half / CORR.step) + 1, sC = CORR.step;
+  const total = L + 2 * ext;
+  const nA = Math.max(2, Math.min(Math.round(total / CORR.step) + 1, Math.floor(CORR.max / nC)));
+  const sA = total / (nA - 1);
+  const at = (a, c) => {
+    const f = a / L, P = gcInterp(dep, arr, f), Q = gcInterp(dep, arr, f + 0.5 / L);
+    return Math.abs(c) < 1e-9 ? P : destPoint(P, bearing(P, Q) + 90, c);
+  };
+  const cells = [];
+  for (let i = 0; i < nA; i++) {
+    const a = -ext + i * sA;
+    for (let j = 0; j < nC; j++) {
+      const c = -CORR.half + j * sC, ctr = at(a, c);
+      const corners = [at(a - sA / 2, c - sC / 2), at(a - sA / 2, c + sC / 2), at(a + sA / 2, c + sC / 2), at(a + sA / 2, c - sC / 2)];
+      cells.push({lat:ctr.lat, lon:ctr.lon, a, c, corners});
+    }
+  }
+  return {cells, sA, sC, nA, nC};
+}
+async function getGridAux(cells){
+  const locs = cells.map(c => ({lat:c.lat, lon:c.lon}));
+  if (state.demo) return demoAux(locs);
+  const chunks = [];
+  for (let i = 0; i < locs.length; i += 100) chunks.push(locs.slice(i, i + 100));
+  const res = await Promise.all(chunks.map(c => getAux(c, 3)));
+  if (res.some(r => !r || r.src !== 'DMI')) return null;
+  return {src:'DMI', list:res.flatMap(r => r.list)};
+}
+async function getGridRain(model, cells){
+  const locs = cells.map(c => ({lat:c.lat, lon:c.lon}));
+  if (state.demo) return demoRain(model, locs);
+  const key = `r|${model.key}|${locKey(locs)}`;
+  const hit = cacheGet(key); if (hit) return hit;
+  const chunks = [];
+  for (let i = 0; i < locs.length; i += 100) chunks.push(locs.slice(i, i + 100));
+  const one = async c => {
+    for (const id of model.ids) {
+      const r = await fetchJSON(urlFor(model.endpoint, c, {hourly:'precipitation', models:id, timeformat:'unixtime', timezone:'GMT', forecast_days:String(model.days), cell_selection:'land'}));
+      if (r.res.status === 429) throw new Error(RATE_MSG);
+      if (!r.res.ok || !r.j || r.j.error) continue;
+      const arr = Array.isArray(r.j) ? r.j : [r.j];
+      if (arr.length !== c.length) continue;
+      return arr.map(o => { const h = o.hourly || {}; const v = h.precipitation ?? h[`precipitation_${id}`]; return {times:h.time || [], pr:Array.isArray(v) ? v : []}; });
+    }
+    throw new Error('pluie indisponible');
+  };
+  const list = (await Promise.all(chunks.map(one))).flat();
+  cache.set(key, {t:Date.now(), v:list});
+  return list;
+}
+let gridSeq = 0;
+async function loadGrid(){
+  const R = state.route;
+  if (!R || state.dirty || state.layer === 'none') { drawGrid(); return; }
+  const key = routeKey(R);
+  if (!state.grid || state.grid.key !== key) state.grid = {key, ...buildCorridor(R.dep, R.arr), aux:null, rain:null, rainModel:null};
+  const G = state.grid, seq = ++gridSeq;
+  const needAux = (state.layer === 'base' || state.layer === 'vis') && !G.aux;
+  const needRain = state.layer === 'rain' && (!G.rain || G.rainModel !== state.modelKey);
+  if (!needAux && !needRain) { drawGrid(); return; }
+  G.loading = true; renderMapLegend();
+  try {
+    if (needAux) { const a = await getGridAux(G.cells); if (seq !== gridSeq) return; G.aux = a || 'none'; if (a) G.auxT = new Map(a.list[0].times.map((t, i) => [t, i])); }
+    if (needRain) { const r = await getGridRain(modelOf(state.modelKey), G.cells); if (seq !== gridSeq) return; G.rain = r; G.rainModel = state.modelKey; G.rainT = new Map(r[0].times.map((t, i) => [t, i])); }
+  } catch (e) {
+    if (seq !== gridSeq) return;
+    if (needRain) { G.rain = 'none'; G.rainModel = state.modelKey; }
+    G.err = e.message === RATE_MSG ? RATE_MSG : '';
+  }
+  G.loading = false;
+  drawGrid();
+}
+function drawGrid(){
+  const M = MAP; if (!M) return;
+  const R = state.route, G = state.grid;
+  const ok = R && G && !state.dirty && state.mode === 'route' && state.layer !== 'none' && G.key === routeKey(R);
+  if (!ok) { if (M.gridKey) { M.gridG.clearLayers(); M.gridKey = null; } renderMapLegend(); return; }
+  if (M.gridKey !== G.key) {
+    M.gridG.clearLayers();
+    G.polys = G.cells.map((c, k) => {
+      const p = L.polygon(c.corners.map(q => [q.lat, q.lon]), {renderer:M.cr, stroke:false, fillOpacity:0, interactive:true});
+      p.on('click', e => cellPopup(k, e.latlng));
+      return p.addTo(M.gridG);
+    });
+    M.gridKey = G.key;
+  }
+  updateGrid();
+}
+function cellVal(k, u){
+  const G = state.grid, v = {E:null, bAgl:null, fog:false, vis:null, pr:null, aux:false, rain:false};
+  if (G.aux && G.aux !== 'none') {
+    const a = G.aux.list[k], i = G.auxT.get(u);
+    v.E = a.elev;
+    if (i != null) {
+      const at = arr => arr ? (arr[i] ?? null) : null;
+      const cb = at(a.cb), cc2 = at(a.cc2), ccl = at(a.ccl); v.vis = at(a.vis);
+      v.aux = cb != null || v.vis != null;
+      v.fog = (cc2 != null && cc2 >= 50) || (v.vis != null && v.vis < 1000);
+      if (cb != null && cb > 0 && (ccl == null || ccl >= 20)) v.bAgl = cb * FT;
+      else if (v.fog) v.bAgl = 0;
+    }
+  }
+  if (G.rain && G.rain !== 'none') { const r = G.rain[k], i = G.rainT.get(u); if (i != null && r.pr[i] != null) { v.pr = r.pr[i]; v.rain = true; } }
+  return v;
+}
+function cellStyle(v, col){
+  const t = state.th, none = {fillOpacity:0};
+  if (state.layer === 'base') {
+    if (v.bAgl == null) return none;
+    if (v.bAgl <= 0) return {fillColor:col.c, fillOpacity:.7};
+    if (v.bAgl < t.baseCrit) return {fillColor:col.c, fillOpacity:.5};
+    if (v.bAgl < t.baseMarg) return {fillColor:col.w, fillOpacity:.45};
+    if (v.bAgl < 3000) return {fillColor:col.o, fillOpacity:.22};
+    return none;
+  }
+  if (state.layer === 'vis') {
+    if (v.vis == null) return none;
+    if (v.vis < t.visCrit) return {fillColor:col.c, fillOpacity:.55};
+    if (v.vis < t.visMarg) return {fillColor:col.w, fillOpacity:.42};
+    return none;
+  }
+  if (state.layer === 'rain') {
+    const p = v.pr;
+    if (p == null || p < 0.1) return none;
+    if (p < 0.5) return {fillColor:col.r1, fillOpacity:.5};
+    if (p < 2) return {fillColor:col.r2, fillOpacity:.55};
+    if (p < 5) return {fillColor:col.r3, fillOpacity:.6};
+    return {fillColor:col.r4, fillOpacity:.65};
+  }
+  return none;
+}
+function gridColors(){ return {c:cssVar('--crit'), w:cssVar('--warn'), o:cssVar('--ok'), r1:cssVar('--rain1'), r2:cssVar('--rain2'), r3:cssVar('--rain3'), r4:cssVar('--rain4')}; }
+function updateGrid(){
+  const M = MAP, G = state.grid;
+  if (!M || !G || !G.polys || M.gridKey !== G.key) { renderMapLegend(); return; }
+  const col = gridColors(), u = state.selU;
+  let n = 0;
+  G.polys.forEach((p, k) => { const v = cellVal(k, u); if (state.layer === 'rain' ? v.rain : v.aux) n++; p.setStyle(cellStyle(v, col)); });
+  G.nData = n;
+  renderMapLegend();
+}
+function cellPopup(k, ll){
+  const G = state.grid; if (!G || !MAP) return;
+  const v = cellVal(k, state.selU), c = G.cells[k];
+  const along = c.a * KM_NM, side = c.c === 0 ? 'sur la ligne' : `${Math.abs(c.c)} km à ${c.c > 0 ? 'droite' : 'gauche'} de la ligne`;
+  const lines = [`<b>${hMain(state.selU)}</b> · ${along < 0 ? 'avant D' : fmtNm(Math.max(0, c.a)) + ' NM du départ'}, ${side}`];
+  if (G.aux && G.aux !== 'none') {
+    lines.push(v.bAgl == null ? 'Pas de nuage bas (DMI)' : v.bAgl <= 0 ? '<b>Relief dans les nuages / brouillard</b>' : `Base DMI <b>${nf.format(r100(v.bAgl))} ft sol</b>`);
+    lines.push(`Visibilité <b>${fmtVis(v.vis)} km</b>`);
+  }
+  if (G.rain && G.rain !== 'none') lines.push(`Pluie ${modelOf(G.rainModel).short} <b>${v.pr != null ? v.pr.toFixed(1).replace('.', ',') : '—'} mm/h</b>`);
+  if (v.E != null) lines.push(`Relief au centre de la case ${fmtFt(v.E)} ft`);
+  L.popup({maxWidth:260}).setLatLng(ll).setContent(lines.join('<br>')).openOn(MAP.m);
+}
+function renderMapLegend(){
+  const el = $('#mapLegend'); if (!el) return;
+  const G = state.grid, R = state.route, t = state.th, lay = state.layer;
+  const sw = (cls, op, txt) => `<span class="lg"><span class="sw" style="background:var(${cls});opacity:${op}"></span>${txt}</span>`;
+  if (lay === 'none') { el.innerHTML = 'Aucune couche affichée.'; return; }
+  if (!R || state.dirty) { el.innerHTML = `Couche ${LAYER_TXT[lay]} : elle s'affiche une fois le trajet calculé.`; return; }
+  if (!G || G.loading) { el.innerHTML = `<span class="spin"></span>Chargement de la couche ${LAYER_TXT[lay]} (bande de ±${CORR.half} km)…`; return; }
+  if (G.err) { el.innerHTML = esc(G.err); return; }
+  const h = state.selU ? `<b>${hMain(state.selU)}</b> · ` : '';
+  if (lay === 'base' || lay === 'vis') {
+    if (G.aux === 'none') { el.innerHTML = 'Couche indisponible : DMI ne répond pas pour cette zone.'; return; }
+    if (!G.nData) { el.innerHTML = `${h}Pas de données DMI à cette heure (échéance au-delà de 2,5 jours environ).`; return; }
+    el.innerHTML = lay === 'base'
+      ? `${h}Base DMI ${sw('--crit', .7, 'relief masqué / brouillard')}${sw('--crit', .5, `&lt; ${nf.format(t.baseCrit)} ft`)}${sw('--warn', .45, `&lt; ${nf.format(t.baseMarg)} ft`)}${sw('--ok', .25, '&lt; 3 000 ft sol')}<span class="lg">sans couleur : pas de nuage sous 3 000 ft sol</span>`
+      : `${h}Visibilité DMI ${sw('--crit', .55, `&lt; ${fmtVis(t.visCrit)} km`)}${sw('--warn', .42, `&lt; ${fmtVis(t.visMarg)} km`)}<span class="lg">sans couleur : au-delà</span>`;
+    return;
+  }
+  if (G.rain === 'none') { el.innerHTML = 'Couche pluie indisponible pour ce modèle.'; return; }
+  if (!G.nData) { el.innerHTML = `${h}Pas de données de pluie à cette heure.`; return; }
+  el.innerHTML = `${h}Pluie ${esc(modelOf(G.rainModel).short)} ${sw('--rain1', .5, '0,1–0,5')}${sw('--rain2', .55, '0,5–2')}${sw('--rain3', .6, '2–5')}${sw('--rain4', .65, '&gt; 5 mm/h')}`;
+}
+function setLayer(l){
+  state.layer = l; saveSettings();
+  document.querySelectorAll('#layerSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.layer === l)));
+  if (MAP && MAP.m) MAP.m.closePopup();
+  loadGrid();
+}
+/* Animation sur la fenêtre de mission */
+let playTimer = null;
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>';
+function setPlay(on){
+  clearInterval(playTimer); playTimer = null;
+  if (on) playTimer = setInterval(() => {
+    const ts = winTimes(); if (!ts.length || state.mode !== 'route') { setPlay(false); return; }
+    const k = ts.indexOf(state.selU);
+    selectHour(ts[(k + 1) % ts.length]);
+  }, 1100);
+  const b = $('#btnPlay');
+  b.setAttribute('aria-pressed', String(!!playTimer));
+  b.innerHTML = playTimer ? `${ICON_PAUSE}Pause` : `${ICON_PLAY}Animer`;
 }
 
 /* ================= Mode point : coupe verticale ================= */
@@ -1751,20 +1987,21 @@ async function loadRoute(){
     state.selK = null;
     state.dirty = fmtCoord(dep) !== fmtCoord(state.dep) || fmtCoord(arr) !== fmtCoord(state.arr);
     clampWindow(); setStatus(null); setHint(); renderAll(true);
+    loadGrid();
   } catch (e) { setHint(); showLoadError(e); }
   finally { busy(false); }
   saveSettings();
   if (state.again) { state.again = false; if (state.dirty) loadRoute(); }
 }
 function startDemo(){
-  state.demo = true; state.startU = null; state.selU = null;
+  state.demo = true; state.startU = null; state.selU = null; state.grid = null;
   load().then(() => {
     const c = curSet(); if (!c) return;
     const t0 = c.times[0] + 26 * 3600;
     if (c.times.includes(t0)) { state.startU = t0; state.selU = t0 + 6 * 3600; clampWindow(); renderAll(true); }
   });
 }
-function stopDemo(){ state.demo = false; state.data = null; state.route = null; state.startU = null; state.selU = null; renderAll(); load(); }
+function stopDemo(){ state.demo = false; state.data = null; state.route = null; state.grid = null; state.startU = null; state.selU = null; setPlay(false); renderAll(); load(); }
 
 /* ================= Données simulées (mode exemple, hors connexion) ================= */
 function rng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -1839,13 +2076,21 @@ function demoMain(model, locs, mode){
 function demoAux(locs){
   const t0 = Math.floor(Date.now() / 86400000) * 86400, N = 4 * 24;
   return {src:'DMI', label:'demo', list:locs.map(l => {
-    const E = demoElevAt(l.lat, l.lon), a = {times:[], cb:[], vis:[], cc2:[], ccl:[]};
+    const E = demoElevAt(l.lat, l.lon), a = {times:[], elev:E, cb:[], vis:[], cc2:[], ccl:[]};
     for (let k = 0; k < N; k++) {
       const w = demoWx('arome', l.lat, l.lon, E, k + 0.4);
       a.times.push(t0 + k * 3600); a.cb.push(Math.round(w.cb)); a.vis.push(Math.round(w.vis * 0.9)); a.cc2.push(w.cc2); a.ccl.push(w.ccl);
     }
     return a;
   })};
+}
+function demoRain(model, locs){
+  const t0 = Math.floor(Date.now() / 86400000) * 86400, N = model.days * 24;
+  return locs.map(l => {
+    const E = demoElevAt(l.lat, l.lon), r = {times:[], pr:[]};
+    for (let k = 0; k < N; k++) { const w = demoWx(model.key, l.lat, l.lon, E, k); r.times.push(t0 + k * 3600); r.pr.push(Math.round(w.pr * (0.7 + 0.6 * Math.abs(Math.sin(l.lon * 90 + k))) * 10) / 10); }
+    return r;
+  });
 }
 
 /* ================= Événements ================= */
@@ -1871,7 +2116,7 @@ function applyTheme(){
 }
 function setMode(mode){
   if (state.mode === mode) return;
-  state.mode = mode; state.cmp = null; setStatus(null);
+  state.mode = mode; state.cmp = null; setStatus(null); setPlay(false);
   $('#setup').open = mode === 'point' && !state.data;
   saveSettings(); renderAll(true);
   if (mode === 'route' && !MAP && leafletState === 'ready') { ensureMap(); setTimeout(() => { if (MAP) { MAP.m.invalidateSize(); renderMap(true); } }, 0); }
@@ -1936,7 +2181,9 @@ function wire(){
   ['#thBaseC', '#thBaseM', '#thVisC', '#thVisM'].forEach(id => $(id).addEventListener('change', thChange));
   $('#btnLoad').addEventListener('click', () => { if (applyForm()) { renderTop(); load(); } });
   ['#fCoord', '#fName'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnLoad').click(); } }));
-  $('#btnSwap').addEventListener('click', () => { [state.dep, state.arr] = [state.arr, state.dep]; routeEdited(); });
+  $('#btnSwap').addEventListener('click', () => { setPlay(false); [state.dep, state.arr] = [state.arr, state.dep]; routeEdited(); });
+  document.querySelectorAll('#layerSeg button').forEach(b => b.addEventListener('click', () => setLayer(b.dataset.layer)));
+  $('#btnPlay').addEventListener('click', () => setPlay(!playTimer));
   $('#btnGeo').addEventListener('click', () => {
     if (!navigator.geolocation) { hintErr('Géolocalisation indisponible sur cet appareil.'); return; }
     hintErr(null); $('#coordHint').textContent = 'Recherche de la position…';
@@ -1975,7 +2222,8 @@ function wire(){
 /* ================= Démarrage ================= */
 loadSettings(); applyTheme(); fillControls(); wire();
 $('#setup').open = state.mode === 'point';
-renderAll(); loadLeaflet();
+document.querySelectorAll('#layerSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.layer === state.layer)));
+setPlay(false); renderAll(); renderMapLegend(); loadLeaflet();
 if (/[?&]demo\b/.test(location.search)) startDemo(); else load();
 })();
 </script>
